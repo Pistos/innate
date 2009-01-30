@@ -1,11 +1,11 @@
+autoload(:CGI, 'cgi') # in case you want to use html_unescape
+
 module Innate
 
   # Shortcuts to some CGI methods
 
   module Helper
     module CGI
-      DEFAULT << self
-
       # shortcut for Rack::Utils.escape
       def url_encode(*args)
         Rack::Utils.escape(*args.map{|a| a.to_s })

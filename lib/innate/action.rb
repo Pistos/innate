@@ -1,93 +1,100 @@
 module Innate
-  class Action < Struct.new(:node, :method, :params, :view, :layout, :instance,
-                            :exts, :wish, :options, :variables, :value,
-                            :view_value)
-  end unless defined?(Innate::Action)
+  ACTION_MEMBERS = [ :node, :method, :params, :view, :layout, :instance, :exts,
+                     :wish, :options, :variables, :value, :view_value ]
 
-  class Action
+  class Action < Struct.new(*ACTION_MEMBERS)
     def self.create(hash)
-      new(*members.map{|m| hash[m.to_sym] })
+      new(*hash.values_at(*ACTION_MEMBERS))
     end
-
-    CONTENT_TYPE = {
-      'sass' => 'text/css',
-    }
-
-    WISH_TRANSFORM = {
-      'json' => ['json', :to_json],
-      'yaml' => ['yaml', :to_yaml],
-    }
 
     def call
-      wrap do
-        setup
-        render
-      end
-    end
-
-    def wrap
       Current.actions << self
-      yield
+      self.instance = node.new
+      self.variables[:content] ||= nil
+      render
     ensure
       Current.actions.delete(self)
     end
 
-    def content_type=(ct)
-      @content_type = ct
+    def binding
+      instance.binding
     end
 
-    private # think about internal API, don't expose it for now
+    def sync_variables(from_action)
+      instance = from_action.instance
 
-    def setup
-      self.instance = node.new
-      self.value = instance.__send__(method, *params) if method
-      self.view_value = File.read(view) if view
+      instance.instance_variables.each{|iv|
+        iv_value = instance.instance_variable_get(iv)
+        iv_name = iv.to_s[1..-1]
+        self.variables[iv_name.to_sym] = iv_value
+      }
     end
+
+    # Copy variables to given binding.
+    def copy_variables(binding = self.binding)
+      if variables.any?
+        binding.eval('
+          action = Innate::Current.actions.last
+          action.variables.each do |iv, value|
+            instance_variable_set("@#{iv}", value)
+          end')
+      end
+    end
+
+    private
 
     def render
-      dependency, method = WISH_TRANSFORM[wish]
-
-      if method
-        require dependency if dependency
-        node.response['Content-Type'] = content_type
-        value.__send__(method)
-      else
-        wrap_in_layout{ fulfill_wish(view_value || value) }
+      instance.aspect_wrap(self) do
+        self.value = instance.__send__(method, *params) if method
+        self.view_value = File.read(view) if view
       end
+
+      content_type, body = send(Innate.options.action.wish[wish] || :as_html)
+      Current.response['Content-Type'] ||= content_type
+
+      body
+    end
+
+    def as_html
+      return 'text/html', wrap_in_layout{ fulfill_wish(view_value || value) }
+    end
+
+    def as_yaml
+      require 'yaml'
+      return 'text/yaml', (value || view_value).to_yaml
+    end
+
+    def as_json
+      require 'json'
+      return 'application/json', (value || view_value).to_json
     end
 
     def fulfill_wish(string)
       way = File.basename(view).gsub!(/.*?#{wish}\./, '') if view
+      way ||= node.provide[wish] || node.provide['html']
 
-      if way ||= node.provide[wish]
-        node.response['Content-Type'] = content_type
+      if way
+        # Rack::Mime.mime_type(".#{wish}", 'text/html')
         View.get(way).render(self, string)
       else
-        return nil
-        # raise
+        raise "No way!"
       end
-    end
-
-    def content_type
-      return @content_type if defined?(@content_type)
-      fallback = CONTENT_TYPE[wish] || 'text/plain'
-      @content_type = Rack::Mime.mime_type(".#{wish}", fallback)
     end
 
     def wrap_in_layout
       return yield unless layout
 
-      layout_action = dup
-      layout_action.view = layout
-      layout_action.method = nil
-      layout_action.layout = nil
-      instance.instance_variables.each{|iv|
-        iv_value = instance.instance_variable_get(iv)
-        iv_name = iv.to_s[1..-1]
-        layout_action.variables[iv_name] = iv_value
-      }
-      layout_action.variables[:content] = yield
-      layout_action.call
+      action = dup
+      action.view, action.method = layout_view_or_method(*layout)
+      action.layout = nil
+      action.sync_variables(self)
+      action.variables[:content] = yield
+      action.call
+    end
+
+    def layout_view_or_method(name, arg)
+      return arg, nil if name == :layout || name == :view
+      return nil, arg
     end
   end
 end

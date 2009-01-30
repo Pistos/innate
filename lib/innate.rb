@@ -1,5 +1,9 @@
+# > What can be done with fewer assumptions is done in vain with more.
+#   -- William of Ockham (ca. 1285-1349)
+
 module Innate
   ROOT = File.expand_path(File.dirname(__FILE__))
+
   unless $LOAD_PATH.any?{|lp| File.expand_path(lp) == ROOT }
     $LOAD_PATH.unshift(ROOT)
   end
@@ -8,21 +12,26 @@ end
 # stdlib
 require 'pp'
 require 'set'
+require 'pathname'
+require 'digest/sha1'
 require 'ipaddr'
+require 'socket'
+require 'logger'
+require 'uri'
 
 # 3rd party
-begin; require 'rubygems'; rescue LoadError; end
 require 'rack'
 
-module Rack
-  autoload 'Profile', 'rack/profile'
-end
-
-# innate
+# innate core patches
 require 'innate/core_compatibility/string'
 require 'innate/core_compatibility/basic_object'
 
-require 'innate/option'
+# innate core
+require 'innate/version'
+require 'innate/traited'
+require 'innate/cache'
+require 'innate/node'
+require 'innate/options'
 require 'innate/log'
 require 'innate/state'
 require 'innate/trinity'
@@ -31,10 +40,11 @@ require 'innate/mock'
 require 'innate/adapter'
 require 'innate/action'
 require 'innate/helper'
-require 'innate/node'
 require 'innate/view'
 require 'innate/session'
+require 'innate/session/flash'
 require 'innate/dynamap'
+require 'innate/route'
 
 require 'rack/reloader'
 require 'rack/middleware_compiler'
@@ -42,62 +52,58 @@ require 'rack/middleware_compiler'
 module Innate
   extend Trinity
 
-  @config = Options.for(:innate){|innate|
-    innate.root = Innate::ROOT
-    innate.started = false
+  # Note that `m.innate` takes away most of the boring part and leaves it up to
+  # you to select your middleware in your application.
+  #
+  # This expands to:
+  #
+  #   use Rack::ShowExceptions
+  #   use Rack::RouteExceptions
+  #   use Rack::ShowStatus
+  #   use Rack::Reloader
+  #   use Rack::Cascade.new([
+  #     Rack::File.new('public'),
+  #     Innate::Current.new(
+  #       Rack::Cascade.new([
+  #         Innate::Rewrite.new(Innate::DynaMap),
+  #         Innate::Route.new(Innate::DynaMap)])))
+  DEFAULT_MIDDLEWARE = lambda{|m|
+    m.use Rack::CommonLogger  # usually fast, depending on the output
+    m.use Rack::ShowExceptions  # fast
+    # m.use Rack::RouteExceptions # fast, use when you have custom error pages.
+    m.use Rack::ShowStatus      # fast
+    m.use Rack::Reloader        # reasonably fast depending on settings
+    # m.use Rack::Lint          # slow, use only while developing
 
-    innate.port = 7000
-    innate.host = '0.0.0.0'
-    innate.adapter = :webrick
-
-    innate.header = {
-      'Content-Type' => 'text/html',
-      # 'Accept-Charset' => 'utf-8',
-    }
-
-    innate.redirect_status = 302
-
-    innate.app do |app|
-      app.root = '/'
-      app.view = 'view'
-      app.layout = 'layout'
-    end
-
-    innate.session do |session|
-      session.key = 'innate.sid'
-      session.domain = false
-      session.path = '/'
-      session.secure = false
-
-      # The current value is a time at:
-      #   2038-01-19 03:14:07 UTC
-      # Let's hope that by then we get a better ruby with a better Time class
-      session.expires = Time.at(2147483647)
-    end
+    m.innate
   }
 
   module_function
 
-  def start(options = {})
-    return if @config.started
-    setup_middleware
+  def start(parameter = {}, &block)
+    setup_dependencies
+    setup_middleware(&block)
 
-    config.app.root = go_figure_root(options, caller)
-    config.started = true
-    config.adapter = (options[:adapter] || @config.adapter).to_s
+    options[:app][:root] = go_figure_root(parameter, caller)
+    options.merge!(parameter)
 
-    trap('INT'){ stop }
+    return if options.started
+    options.started = true
 
-    Adapter.start(middleware(:innate), config)
+    trap(options[:trap]){ stop(10) } if options[:trap]
+
+    start!(options)
   end
 
-  def stop(wait = 0)
-    Log.info "Shutdown Innate"
+  def start!(options = Innate.options)
+    Adapter.start(middleware(:innate), options)
+  end
+
+  def stop(wait = 3)
+    Log.info("Shutdown Innate within #{wait} seconds")
+    Timeout.timeout(wait){ exit }
+  ensure
     exit!
-  end
-
-  def config
-    @config
   end
 
   def middleware(name, &block)
@@ -108,19 +114,18 @@ module Innate
     Rack::MiddlewareCompiler.build!(name, &block)
   end
 
-  def setup_middleware
-    middleware :innate do |m|
-      # m.use Rack::CommonLogger # usually fast, depending on the output
-      m.use Rack::ShowExceptions # fast
-      m.use Rack::ShowStatus     # fast
-      m.use Rack::Reloader       # reasonably fast depending on settings
-      # m.use Rack::Lint         # slow, use only while developing
-      # m.use Rack::Profile      # slow, use only for debugging or tuning
-      m.use Innate::Current      # necessary
-
-      m.cascade Rack::File.new('public'), Innate::DynaMap
-    end
+  def setup_dependencies
+    options[:setup].each{|obj| obj.setup }
   end
+
+  # Set the default middleware for applications.
+  def setup_middleware(&block)
+    middleware(:innate, &(block || DEFAULT_MIDDLEWARE))
+  end
+
+  # Pass the +env+ to this method and it will be sent to the appropriate
+  # middleware called +mw+.
+  # Tries to avoid recursion.
 
   def call(env, mw = :innate)
     this_file = File.expand_path(__FILE__)
@@ -132,9 +137,20 @@ module Innate
     middleware(mw).call(env)
   end
 
+  # Innate can be started by:
+  #
+  #   Innate.start :file => __FILE__
+  #   Innate.start :root => '/path/to/here'
+  #
+  # In case these options are not passed we will try to figure out a file named
+  # `start.rb` in the backtrace and use the directory it resides in.
+  #
+  # TODO: better documentation and nice defaults, don't want to rely on a
+  #       filename, bad mojo.
+
   def go_figure_root(options, backtrace)
-    if file = options[:file]
-      return File.dirname(file)
+    if o_file = options[:file]
+      return File.dirname(o_file)
     elsif root = options[:root]
       return root
     end

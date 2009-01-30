@@ -1,51 +1,48 @@
 module Innate
   module Helper
-    module Aspect
-      DEFAULT << self
 
+    # Provides before/after wrappers for actions
+    module Aspect
       AOP = Hash.new{|h,k| h[k] = Hash.new{|hh,kk| hh[kk] = {} }}
 
       def self.included(into)
         into.extend(SingletonMethods)
-        into.__send__(:include, InstanceMethods)
       end
 
       # Consider objects that have Aspect included
       def self.ancestral_aop(from)
         aop = {}
-        from.ancestors.reverse.map{|anc|
-          next unless anc < Aspect
-          aop.merge! AOP[anc]
-        }
+        from.ancestors.reverse.map{|anc| aop.merge!(AOP[anc]) if anc < Aspect }
         aop
+      end
+
+      def aspect_call(position, name)
+        return unless aop = Aspect.ancestral_aop(self.class)
+        return unless block_holder = aop[position]
+        return unless block = block_holder[name.to_sym]
+        block.call
+      end
+
+      def aspect_wrap(action)
+        return yield unless method = action.method
+
+        aspect_call(:before, method)
+        yield
+        aspect_call(:after, method)
       end
 
       module SingletonMethods
         def before(name, &block)
-          init_aspect(:before, name, block)
+          AOP[self][:before][name] = block
         end
 
         def after(name, &block)
-          init_aspect(:after, name, block)
+          AOP[self][:after][name] = block
         end
 
         def wrap(name, &block)
           before(name, &block)
           after(name, &block)
-        end
-
-        def init_aspect(direction, name, block)
-          AOP[self][direction][name] = block
-        end
-      end
-
-      module InstanceMethods
-        def call_aspect(direction, name)
-          aop = Aspect.ancestral_aop(self.class)
-
-          if block = aop[direction][name]
-            block.call
-          end
         end
       end
     end

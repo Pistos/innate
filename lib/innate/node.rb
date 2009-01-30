@@ -1,5 +1,3 @@
-require 'set'
-
 module Innate
 
   # The nervous system of Innate, so you can relax.
@@ -34,13 +32,38 @@ module Innate
   #   * If you want an action to act as a catch-all, use `def index(*args)`.
 
   module Node
+    include Traited
+
+    HELPERS = [:aspect, :cgi, :flash, :link, :partial, :redirect, :send_file]
+    LIST = Set.new
+
+    trait(:layout => nil, :alias_view => {}, :provide => {},
+          :method_arities => {})
 
     # Upon inclusion we make ourselves comfortable.
-
     def self.included(obj)
       obj.__send__(:include, Helper)
+      obj.helper(*HELPERS)
+
       obj.extend(Trinity, self)
-      obj.provide(:html => :none) # provide .html with no interpolation
+
+      LIST << obj
+
+      return if obj.provide.any?
+      # provide .html with no interpolation
+      obj.provide(:html => :erb, :yaml => :yaml, :json => :json)
+    end
+
+    def self.setup
+      LIST.each{|node| Innate.map(node.mapping, node) }
+      Log.debug("Mapped Nodes: %p" % DynaMap::MAP)
+    end
+
+    def mapping
+      mapped = Innate.to(self)
+      return mapped if mapped
+      return '/' if Innate::Node::LIST.size == 1
+      "/" << self.name.gsub(/\B[A-Z][^A-Z]/, '_\&').downcase
     end
 
     # Shortcut to map or remap this Node
@@ -58,7 +81,7 @@ module Innate
     #     include Innate::Node
     #     map '/feed'
     #
-    #     provide :html => :haml, :rss => :haml, :atom => :haml
+    #     provide :html => :erb, :rss => :erb, :atom => :erb
     #
     #     def index
     #       @feed = build_some_feed
@@ -67,17 +90,13 @@ module Innate
     #
     # This will do following to these requests:
     #
-    # /feed      # => call Feeds#index with template /view/feed/index.haml
-    # /feed.atom # => call Feeds#index with template /view/feed/index.atom.haml
-    # /feed.rss  # => call Feeds#index with template /view/feed/index.rss.haml
+    # /feed      # => call Feeds#index with template /view/feed/index.erb
+    # /feed.atom # => call Feeds#index with template /view/feed/index.atom.erb
+    # /feed.rss  # => call Feeds#index with template /view/feed/index.rss.erb
     #
-    # If index.atom.haml isn't available we fall back to /view/feed/index.haml
+    # If index.atom.erb isn't available we fall back to /view/feed/index.erb
     #
     # So it's really easy to add your own content representation.
-    # The correct Content-Type for the response will be retrieved from
-    # Rack::Mime and can be manually overwritten in the controller by e.g.
-    #
-    #   action.content_type = 'text/css'
     #
     # If no matching provider is found for the given extension it will fall
     # back to the one specified for html.
@@ -92,22 +111,26 @@ module Innate
     #
     # So a request to
     #
-    # /feed.txt # => call Feeds#index with template /view/feed/index.txt.haml
+    # /feed.txt # => call Feeds#index with template /view/feed/index.txt.erb
+    #
+    # NOTE: provides also have effect on the chosen layout for the action.
+    #
+    # Given a Node at '/' with `layout('default')`:
+    #   /layout/default.erb
+    #   /layout/default.rss.erb
+    #   /view/index.erb
+    #   /view/feed.rss.erb
+    #
+    # /feed.rss will wrap /view/feed.rss.erb in /layout/default.rss.erb
+    # /index    will wrap /view/index.erb    in /layout/default.erb
 
     def provide(formats = {})
-      @provide ||= {}
+      return ancestral_trait[:provide] if formats.empty?
 
-      if formats.respond_to?(:each_pair)
-        formats.each_pair{|k,v| @provide[k.to_s] = v }
-      elsif formats.respond_to?(:to_sym)
-        formats[formats.to_sym.to_s] = formats
-      elsif formats.respond_to?(:to_str)
-        formats[formats.to_str] = formats
-      else
-        raise(ArgumentError, "provide(%p) is invalid parameter" % formats)
-      end
+      trait[:provide] ||= {}
+      formats.each{|pr, as| trait[:provide][pr.to_s] = as.to_s }
 
-      @provide
+      ancestral_trait[:provide]
     end
 
     # This makes the Node a valid application for Rack.
@@ -135,31 +158,35 @@ module Innate
       path = env['PATH_INFO']
       path << '/' if path.empty?
 
-      try_resolve(path)
+      response.reset
+      response = try_resolve(path)
+      response['Content-Type'] ||= 'text/html'
+
+      Current.session.flush(response)
 
       response.finish
-    rescue Exception => exception
-      Log.error(exception)
-      raise(exception)
     end
 
     # Let's try to find some valid action for given +path+.
     # Otherwise we dispatch to action_not_found
 
     def try_resolve(path)
-      if action = resolve(path)
-        action_found(action)
-      else
-        action_not_found(path)
-      end
+      action = resolve(path)
+      action ? action_found(action) : action_not_found(path)
     end
 
+    # Executed once an Action has been found.
+    # Reset the Response instance, catch :respond and :redirect.
+    # Action#call has to return a String.
+
     def action_found(action)
-      catch(:respond) do
-        catch(:redirect) do
-          response.write(action.call)
-          response['Content-Type'] ||= action.content_type
-        end
+      result = catch(:respond){ catch(:redirect){ action.call }}
+
+      if result.respond_to?(:finish)
+        return result
+      else
+        Current.response.write(result)
+        return Current.response
       end
     end
 
@@ -195,6 +222,8 @@ module Innate
       response.status = 404
       response['Content-Type'] = 'text/plain'
       response.write("Action not found at: %p" % path)
+
+      response
     end
 
     # Let's get down to business, first check if we got any wishes regarding
@@ -202,10 +231,20 @@ module Innate
     # html.
 
     def resolve(path)
-      name, *exts = path.split('.')
-      wish = exts.last || 'html'
-
+      name, wish = find_provide(path)
+      update_method_arities
       find_action(name, wish)
+    end
+
+    def find_provide(path)
+      name, wish = path, 'html'
+
+      provide.find do |key, value|
+        next unless path =~ /^(.+)\.#{key}$/i
+        name, wish = $1, key
+      end
+
+      return name, wish
     end
 
     # Now we're talking Action, we try to find a matching template and method,
@@ -213,19 +252,32 @@ module Innate
     # with an Action with everything we know so far about the demands of the
     # client.
 
-    def find_action(name, wish)
-      patterns_for(name){|name, params|
-        view = find_view(name, wish, params)
+    def find_action(given_name, wish)
+      patterns_for(given_name) do |name, params|
+        view = find_view(name, wish)
         method = find_method(name, params)
 
         next unless view or method
 
-        layout = to_layout(@layout).first
+        layout = find_layout(name, wish)
 
-        Action.create(:node => self, :params => params, :wish => wish,
-                      :method => method, :view => view, :options => {},
-                      :variables => {}, :layout => layout)
-      }
+        Action.create(
+          :node => self, :params => params, :wish => wish, :method => method,
+          :view => view, :options => {}, :variables => {}, :layout => layout)
+      end
+    end
+
+    # TODO: allow layouts combined of method and view... hairy :)
+    def find_layout(name, wish)
+      return unless found_layout = layout
+
+      if found = to_layout(found_layout, wish)
+        [:layout, found]
+      elsif found = find_view(found_layout, wish)
+        [:view, found]
+      elsif found = find_method(found_layout, [])
+        [:method, found]
+      end
     end
 
     # I hope this method talks for itself, we check arity if possible, but will
@@ -257,93 +309,89 @@ module Innate
     #
     #   def index(a = :a, b = :b)     # => -1
     #   def index(a = :a, b = :b, *r) # => -1
-
+    #
+    # NOTE: Once 1.9 is mainstream we can use Method#parameters to do accurate
+    #       prediction
     def find_method(name, params)
-      expected_arity = params.size
-
-      possible_methods(name) do |arity|
-        return name if arity == expected_arity or arity < 0
-      end
-
-      return nil
+      return unless arity = trait[:method_arities][name]
+      name if arity == params.size or arity < 0
     end
 
-    # Takes a +name+ of the method to find and a block.
-    # The block takes the arity of the found method.
+    # Answer with and set the @method_arities Hash, keys are method names,
+    # values are method arities.
+    #
+    # Usually called from Node::resolve
+    #
+    # NOTE:
+    #   * This will be executed once for every request, once we have settled
+    #     things down a bit more we can switch to update based on Reloader
+    #     hooks and update once on startup.
+    #     However, that may cause problems with dynamically created methods, so
+    #     let's play it safe for now.
+    #
+    # Example:
+    #
+    #   Hi.update_method_arities
+    #   # => {'index' => 0, 'foo' => -1, 'bar => 2}
+    def update_method_arities
+      arities = trait[:method_arities] = {}
 
-    def possible_methods(name)
-      [self, *(Helper::EXPOSE & ancestors)].each do |object|
-        object.instance_methods(false).each do |im|
-          next unless im.to_s == name
-          yield object.instance_method(im).arity
+      exposed = ancestors & Helper::EXPOSE.to_a
+      higher = ancestors.select{|a| a < Innate::Node }
+
+      (higher + exposed).reverse_each do |ancestor|
+        ancestor.public_instance_methods(false).each do |im|
+          arities[im.to_s] = ancestor.instance_method(im).arity
         end
       end
+
+      arities
     end
 
     # Try to find the best template for the given basename and wish.
     # Also, having extraordinarily much fun with globs.
-
-    def to_view(file, wish)
-      return [] unless file
-
-      app = Options.for('innate:app')
-      app_root = app[:root]
-      app_view = app[:view]
-
-      path = [app_root, app_view, view_root, file]
-
-      return [] unless path.all?
-
-      path = File.join(*path)
-      exts = [@provide[wish], *@provide.keys].flatten.uniq.join(',')
-
-      glob = "#{path}.{#{wish}.,#{wish},}{#{exts},}"
-
-      Dir[glob].uniq
+    def find_view(file, wish)
+      path = [Innate.options.app.root, Innate.options.app.view, view_root, file]
+      to_template(path, wish)
     end
 
     # This is done to make you feel more at home, pass an absolute path or a
     # path relative to your application root to set it, otherwise you'll get
     # the current mapping.
-
     def view_root(location = nil)
-      if location
-        @view_root = location
-      else
-        @view_root ||= Innate.to(self)
-      end
+      return @view_root = location if location
+      @view_root ||= Innate.to(self)
     end
 
-    # All of the above, get first match and lets you know if there's any
-    # ambiguity.
-
-    def find_view(name, wish, params)
-      possible = to_view(name, wish)
-
-      if possible.size > 1
-        interp = [possible.size, name, params, possible]
-        Log.warn "%d views found for %s:%p : %p" % interp
-      end
-
-      possible.first
+    def alias_view(to, from)
+      trait[:alias_view][to] = from
     end
 
     # Find the best matching file for the layout, if any.
+    def to_layout(file, wish)
+      path = [Innate.options.app.root, Innate.options.app.layout, file]
+      to_template(path, wish)
+    end
 
-    def to_layout(file)
-      return [] unless file
+    def to_template(path, wish)
+      return unless path.all?
 
-      app = Options.for('innate:app')
+      path = File.join(*path.map{|pa| pa.to_s })
+      exts = [provide[wish], *provide.keys].flatten.compact.uniq.join(',')
+      found = Dir["#{path}.{#{wish}.,#{wish},}{#{exts},}"].uniq
 
-      path = [app[:root], app[:layout], file]
-      path = File.join(*path.map{|pa| pa.to_s})
-      Dir["#{path}.*"]
+      if found.size > 1
+        Log.warn("%d views found for %p | %p" % [found.size, path, wish])
+      end
+
+      template = found.first
+      ancestral_trait[:alias_view][template] || template
     end
 
     # Set the +name+ of the layout you want, this takes only the basename
     # without any filename-extension or directory.
     def layout(name = nil)
-      @layout = name
+      name ? trait(:layout => name) : ancestral_trait[:layout]
     end
 
     # The innate beauty in Nitro, Ramaze, and Innate.
@@ -376,7 +424,6 @@ module Innate
     #   {"foo__bar"=>["baz"]}
     #   {"foo"=>["bar", "baz"]}
     #   {"index"=>["foo", "bar", "baz"]}
-
     def patterns_for(path)
       atoms = path.split('/')
       atoms.delete('')
@@ -392,5 +439,14 @@ module Innate
 
       return nil
     end
+
+    def wrap_action_call(action)
+      yield(action)
+    end
+
+    # Circumvent strange behaviour in 1.9:
+    # instance.__send__(:binding) would return binding for self of where the
+    # invocation was made.
+    def binding; super; end
   end
 end

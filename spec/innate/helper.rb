@@ -24,12 +24,17 @@ class HelperNodeExpose
   map '/'
 
   helper :smile_helper, :frown_helper
+
+  def frowny
+    "Oh, hi #{frown}"
+  end
 end
 
 describe HelperNodeExpose do
   should 'expose an action' do
     Innate::Mock.get('/smile').body.should == ':)'
     Innate::Mock.get('/frown').status.should == 404
+    Innate::Mock.get('/frowny').body.should == "Oh, hi :("
   end
 end
 
@@ -37,7 +42,7 @@ class FooNodeLink
   include Innate::Node
   map '/foo'
 
-  helper :extend => [:link, :cgi]
+  helper :link, :cgi
 end
 
 describe Innate::Helper::Link do

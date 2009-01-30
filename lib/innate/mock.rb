@@ -14,7 +14,7 @@ module Innate
     end
 
     def self.mock_request
-      Rack::MockRequest.new(Rack::Lint.new(Innate))
+      Rack::MockRequest.new(Innate)
     end
 
     def self.session
@@ -22,6 +22,8 @@ module Innate
     end
 
     class Session
+      attr_accessor :cookie
+
       def initialize
         @cookie = nil
       end

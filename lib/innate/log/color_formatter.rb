@@ -1,5 +1,6 @@
-module Innate
-  class ColorFormatter < Logger::Formatter
+class Logger
+  # Extended Formatter that supports ANSI colors.
+  class ColorFormatter < Formatter
     LEVEL_COLOR = {
       'DEBUG'   => :blue,
       'INFO'    => :white,
@@ -33,6 +34,10 @@ module Innate
 
     def colorize(string, severity)
       "\e[#{COLOR_CODE[LEVEL_COLOR[severity]]}m#{string}\e[0m"
+    end
+
+    def self.color?(logdev)
+      logdev.respond_to?(:tty?) and logdev.tty?
     end
   end
 end

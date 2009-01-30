@@ -4,21 +4,22 @@ module Innate
   # lazy requiring of needed engines.
 
   module View
-    ENGINE = {}
-    TEMP = {}
+    ENGINE, TEMP = {}, {}
+
+    module_function
 
     # Try to obtain given engine by its registered name.
 
-    def self.get(engine)
-      return unless engine
-      engine = engine.to_s
+    def get(engine_or_ext)
+      return unless engine_or_ext
+      eoe = engine_or_ext.to_s
 
-      if klass = TEMP[engine]
+      if klass = TEMP[eoe]
         return klass
-      elsif klass = ENGINE[engine]
-        TEMP[engine] = obtain(klass)
+      elsif klass = ENGINE[eoe]
+        TEMP[eoe] = obtain(klass)
       else
-        TEMP[engine] = View::const_get(engine.capitalize)
+        TEMP[eoe] = const_get(eoe.capitalize)
       end
     end
 
@@ -27,7 +28,7 @@ module Innate
     # on the first request (before TEMP is set).
     # No mutex is used in Fiber environment, see Innate::State and subclasses.
 
-    def self.obtain(klass)
+    def obtain(klass)
       STATE.sync do
         obj = Object
         klass.split('::').each{|e| obj = obj.const_get(e) }
@@ -41,11 +42,11 @@ module Innate
     # +exts+ : any number of arguments will be turned into strings via #to_s
     #          that indicate which filename-extensions the templates may have.
 
-    def self.register(klass, *exts)
+    def register(klass, *exts)
       exts.each do |ext|
         ext = ext.to_s
         if k = ENGINE[ext]
-          warn "#{ext} is assigned to #{k} already"
+          Log.warn "#{ext} is assigned to #{k} already"
         else
           ENGINE[ext] = klass
         end
@@ -54,18 +55,13 @@ module Innate
 
     # Combine Kernel#autoload and Innate::View::register
 
-    def self.auto_register(name, *exts)
+    def auto_register(name, *exts)
       autoload(name, "innate/view/#{name}".downcase)
-      register("Innate::View::#{name}", *exts)
+      register("#{self}::#{name}", *exts)
     end
 
     auto_register :None, :css
-    auto_register :None, :html
-
-    auto_register :Builder, :builder
-    auto_register :Haml,    :haml
-    auto_register :Sass,    :sass
-    auto_register :Tenjin,  :rbhtml
-    auto_register :Nagoro,  :xhtml
+    auto_register :None, :html, :htm
+    auto_register :ERB,  :erb
   end
 end

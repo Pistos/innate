@@ -1,15 +1,13 @@
 module Innate
   module Helper
     module Redirect
-      DEFAULT << self
-
       def respond(body, status = 200, header = {})
         response.write body
         response.status = status
         header['Content-Type'] ||= 'text/html'
         header.each{|k,v| response[k] = v }
 
-        throw(:respond)
+        throw(:respond, response)
       end
 
       def respond!(body, status = 200, header = {})
@@ -38,32 +36,28 @@ module Innate
       # Note that all options are optional and you may just pass a +target+.
 
       def redirect(target, options = {})
-        uri = URI(target.to_s)
+        target = target.to_s
+
+        case target
+        when /^http/, /^\//
+          uri = URI(target)
+        else
+          uri = URI("/#{target}")
+        end
+
         uri.scheme ||= options[:scheme] || request.scheme
         uri.host   ||= options[:host]   || request.host
         uri.port   ||= options[:port]   || request.port
+
         uri = URI(uri.to_s)
 
         yield(uri) if block_given?
 
-        options[:raw!] ? raw_redirect!(uri, options) : raw_redirect(uri, options)
+        raw_redirect(uri, options)
       end
 
-      def raw_redirect(target, options = {})
-        target = target.to_s
-
-        response['Location'] = target
-        response.status = options[:status] || 302
-        response.write    options[:body]   || redirect_body(target)
-
-        Log.debug "Redirect to: #{target}"
-        throw(:redirect, response)
-      end
-
-      # Don't reuse the current response object
-
-      def raw_redirect!(target, options = {}, &block)
-        header = {'Location' => target}
+      def raw_redirect(target, options = {}, &block)
+        header = {'Location' => target.to_s}
         status = options[:status] || 302
         body   = options[:body] || redirect_body(target)
 
@@ -76,8 +70,14 @@ module Innate
           "<a href='#{target}'>#{h target}</a>!"
       end
 
-      def redirect_referrer
-        redirect request.referer
+      def redirect_referrer(fallback = '/')
+        if referer = request.referer and url = request.url
+          referer_uri, request_uri = URI(referer), URI(url)
+
+          redirect(referer) unless referer_uri == request_uri
+        end
+
+        redirect(fallback)
       end
       alias redirect_referer redirect_referrer
     end
