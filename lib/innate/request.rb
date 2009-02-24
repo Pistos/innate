@@ -84,7 +84,7 @@ module Innate
     # which you pass the keys.
     # Valid keys are objects that respond to :to_s
     #
-    # Example:
+    # @usage
     #   request.params
     #   # => {'name' => 'jason', 'age' => '45', 'job' => 'lumberjack'}
     #   request.subset('name')
@@ -108,14 +108,49 @@ module Innate
       URI("#{scheme}://#{host}#{path}")
     end
 
-    # Try to find out which languages the client would like to have.
+    # Try to find out which languages the client would like to have and sort
+    # them by weight, (most wanted first).
+    #
     # Returns and array of locales from env['HTTP_ACCEPT_LANGUAGE].
     # e.g. ["fi", "en", "ja", "fr", "de", "es", "it", "nl", "sv"]
+    #
+    # Usage:
+    #
+    #   request.accept_language
+    #   # => ['en-us', 'en', 'de-at', 'de']
+    #
+    # @param [String #to_s] string the value of HTTP_ACCEPT_LANGUAGE
+    # @return [Array] list of locales
+    # @see Request#accept_language_with_weight
+    # @author manveru
+    def accept_language(string = env['HTTP_ACCEPT_LANGUAGE'])
+      return [] unless string
 
-    def accept_language
-      env['HTTP_ACCEPT_LANGUAGE'].to_s.split(/(?:,|;q=[\d.,]+)/)
+      accept_language_with_weight(string).map{|lang, weight| lang }
     end
     alias locales accept_language
+
+    # Transform the HTTP_ACCEPT_LANGUAGE header into an Array with:
+    #
+    #   [[lang, weight], [lang, weight], ...]
+    #
+    # This algorithm was taken and improved from the locales library.
+    #
+    # Usage:
+    #
+    #   request.accept_language_with_weight
+    #   # => [["en-us", 1.0], ["en", 0.8], ["de-at", 0.5], ["de", 0.3]]
+    #
+    # @param [String #to_s] string the value of HTTP_ACCEPT_LANGUAGE
+    # @return [Array] array of [lang, weight] arrays
+    # @see Request#accept_language
+    # @author manveru
+    def accept_language_with_weight(string = env['HTTP_ACCEPT_LANGUAGE'])
+      string.to_s.gsub(/\s+/, '').split(',').
+            map{|chunk|        chunk.split(';q=', 2) }.
+            map{|lang, weight| [lang, weight ? weight.to_f : 1.0] }.
+        sort_by{|lang, weight| -weight }
+    end
 
     ipv4 = %w[ 127.0.0.1/32 192.168.0.0/16 172.16.0.0/12 10.0.0.0/8 169.254.0.0/16 ]
     ipv6 = %w[ fc00::/7 fe80::/10 fec0::/10 ::1 ]
@@ -141,57 +176,6 @@ module Innate
       env.reject{|key, value| key.to_s !~ INTERESTING_HTTP_VARIABLES }
     end
     alias http_vars http_variables
-
-    # Example Usage:
-    #
-    #  # Template:
-    #
-    #  <form action="/paste">
-    #    <input type="text" name="paste[name]" />
-    #    <input type="text" name="paste[syntax]" />
-    #    <input type="submit" />
-    #  </form>
-    #
-    #  # In your Node:
-    #
-    #  def paste
-    #    name, syntax = request.robust_params['paste'].values_at('name', 'syntax')
-    #    paste = Paste.create_with(:name => name, :syntax => syntax)
-    #    redirect '/'
-    #  end
-    #
-    #  # Or equivalent:
-    #
-    #  def paste
-    #    paste = Paste.create_with(request.robust_params['paste'])
-    #    redirect '/'
-    #  end
-
-    def robust_params(params = self.params)
-      @env['innate.request.robust_params'] ||= parse_robust_params(params)
-    end
-
-    # Parameter parsing based on some PHP (or Rails?) behaviour.
-    # This might contain some bugs somewhere, especially if the incoming data
-    # is malformed there is no guarantee of the outcome.
-    def parse_robust_params(params)
-      result = {}
-
-      params.each do |key, value|
-        if key =~ /^(.*)(\[.*\])/
-          prim, nested = $~.captures
-          ref = result
-
-          splat = key.scan(/(^[^\[]+)|\[([^\]]+)\]/).flatten.compact
-          head, last = splat[0..-2], splat[-1]
-          head.inject(ref){|s,v| s[v] ||= {} }[last] = value
-        else
-          result[key] = value
-        end
-      end
-
-      return result
-    end
 
     REQUEST_STRING_FORMAT = "#<%s params=%p cookies=%p env=%p>"
 

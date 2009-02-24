@@ -7,9 +7,11 @@ require 'pp'
 INNATE_VERSION = Date.today.strftime("%Y.%m.%d")
 
 task :default => [:spec]
+task :publish => [:ydoc]
 
 CLEAN.include('*coverage*')
 
+desc 'update lib/innate/version.rb'
 task :reversion do
   File.open('lib/innate/version.rb', 'w+') do |file|
     file.puts('module Innate')
@@ -18,24 +20,28 @@ task :reversion do
   end
 end
 
+desc 'publish to github'
 task :release => [:reversion, :gemspec] do
   sh('git add MANIFEST CHANGELOG innate.gemspec lib/innate/version.rb')
   puts "I added the relevant files, you can now run:", ''
   puts "git commit -m 'Version #{INNATE_VERSION}'"
-  puts "git tag -d '#{INNATE_VERSION}'"
+  puts "git tag -a -m '#{INNATE_VERSION}' '#{INNATE_VERSION}'"
   puts "git push"
   puts
 end
 
+desc 'update manifest'
 task :manifest do
   File.open('MANIFEST', 'w+') do|manifest|
     manifest.puts(`git ls-files`)
   end
 end
 
+desc 'update changelog'
 task :changelog do
   File.open('CHANGELOG', 'w+') do |changelog|
     `git log -z --abbrev-commit`.split("\0").each do |commit|
+      next if commit =~ /^Merge: \d*/
       ref, author, time, _, title, _, message = commit.split("\n", 7)
       ref    = ref[/commit ([0-9a-f]+)/, 1]
       author = author[/Author: (.*)/, 1].strip
@@ -50,6 +56,7 @@ task :changelog do
   end
 end
 
+desc 'generate gemspec'
 task :gemspec => [:manifest, :changelog] do
   manifest = File.read('MANIFEST').split("\n")
   files = manifest.map{|file| "    %p," % file }.join("\n")[0..-2]
@@ -100,17 +107,21 @@ task :rcov => :clean do
 end
 
 desc 'Run all specs'
-task :spec do
+task :spec => :setup do
   require 'open3'
+  require 'scanf'
 
   specs = Dir['spec/{innate,example}/**/*.rb']
   specs.delete_if{|f| f =~ /cache\/common\.rb/ }
 
+  some_failed = false
   total = specs.size
-  len = specs.sort.last.size
-  left_format = "%4d/%d: %-#{len + 11}s"
+  len = specs.map{|s| s.size }.sort.last
+  tt = ta = tf = te = 0
 
   red, green = "\e[31m%s\e[0m", "\e[32m%s\e[0m"
+  left_format = "%4d/%d: %-#{len + 11}s"
+  spec_format = "%d specifications (%d requirements), %d failures, %d errors"
 
   specs.each_with_index do |spec, idx|
     print(left_format % [idx + 1, total, spec])
@@ -119,15 +130,120 @@ task :spec do
       out = sout.read
       err = serr.read
 
-      md = out.match(/(\d+) tests, (\d+) assertions, (\d+) failures, (\d+) errors/)
-      tests, assertions, failures, errors = all = md.captures.map{|c| c.to_i }
+      out.each_line do |line|
+        tests, assertions, failures, errors = all = line.scanf(spec_format)
+        next unless all.any?
+        tt += tests; ta += assertions; tf += failures; te += errors
 
-      if failures + errors > 0
-        puts((red % "%5d tests, %d assertions, %d failures, %d errors") % all)
-        puts "", out, err, ""
-      else
-        puts((green % "%5d passed") % tests)
+        if tests == 0 || failures + errors > 0
+          puts((red % spec_format) % all)
+          puts out
+          puts err
+        else
+          puts((green % "%6d passed") % tests)
+        end
+
+        break
       end
     end
+  end
+
+  puts(spec_format % [tt, ta, tf, te])
+  exit 1 if some_failed
+end
+
+desc 'Generate YARD documentation'
+task :ydoc do
+  sh('yardoc -o ydoc -r README.md')
+end
+
+begin
+  require 'grancher/task'
+
+  Grancher::Task.new do |g|
+    g.branch = 'gh-pages'
+    g.push_to = 'origin'
+    g.message = 'Updated website'
+    g.directory 'ydoc', 'doc'
+  end
+rescue LoadError
+  # oh well :)
+end
+
+desc 'install dependencies'
+task :setup do
+  GemSetup.new do
+    github = 'http://gems.github.com'
+    Gem.sources << github
+
+    gem('rack', '>=0.9.1')
+    gem('bacon', '>=1.1.0')
+
+    setup
+  end
+end
+
+class GemSetup
+  def initialize(options = {}, &block)
+    @gems = []
+    @options = options
+
+    run(&block)
+  end
+
+  def run(&block)
+    instance_eval(&block) if block_given?
+  end
+
+  def gem(name, version = nil, options = {})
+    if version.respond_to?(:merge!)
+      options = version
+    else
+      options[:version] = version
+    end
+
+    @gems << [name, options]
+  end
+
+  def setup
+    require 'rubygems'
+    require 'rubygems/dependency_installer'
+
+    @gems.each do |name, options|
+      setup_gem(name, options)
+    end
+  end
+
+  def setup_gem(name, options, try_install = true)
+    print "activating #{name} ... "
+    Gem.activate(name, *[options[:version]].compact)
+    require(options[:lib] || name)
+    puts "success."
+  rescue LoadError => error
+    puts error
+    install_gem(name, options) if try_install
+    setup_gem(name, options, try_install = false)
+  end
+
+  def install_gem(name, options)
+    installer = Gem::DependencyInstaller.new(options)
+
+    temp_argv(options[:extconf]) do
+      print "Installing #{name} ... "
+      installer.install(name, options[:version])
+      puts "done."
+    end
+  end
+
+  def temp_argv(extconf)
+    if extconf ||= @options[:extconf]
+      old_argv = ARGV.clone
+      ARGV.replace(extconf.split(' '))
+    end
+
+    yield
+
+  ensure
+    ARGV.replace(old_argv) if extconf
   end
 end

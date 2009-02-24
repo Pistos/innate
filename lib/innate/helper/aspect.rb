@@ -18,22 +18,36 @@ module Innate
 
       def aspect_call(position, name)
         return unless aop = Aspect.ancestral_aop(self.class)
-        return unless block_holder = aop[position]
-        return unless block = block_holder[name.to_sym]
-        block.call
+        return unless block = at_position = aop[position]
+
+        block = at_position[name.to_sym] unless at_position.is_a?(Proc)
+
+        instance_eval(&block) if block
       end
 
       def aspect_wrap(action)
-        return yield unless method = action.method
+        return yield unless method = action.name
 
+        aspect_call(:before_all, method)
         aspect_call(:before, method)
-        yield
+        result = yield
         aspect_call(:after, method)
+        aspect_call(:after_all, method)
+
+        result
       end
 
       module SingletonMethods
+        def before_all(&block)
+          AOP[self][:before_all] = block
+        end
+
         def before(name, &block)
           AOP[self][:before][name] = block
+        end
+
+        def after_all(&block)
+          AOP[self][:after_all] = block
         end
 
         def after(name, &block)

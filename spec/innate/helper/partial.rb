@@ -1,8 +1,8 @@
 require 'spec/helper'
 
+Innate.options.app.root = File.dirname(__FILE__)
 class SpecHelperPartial
-  include Innate::Node
-  map '/'
+  Innate.node '/'
 
   def index
     '<html><head><title><%= render_partial("/title") %></title></head></html>'
@@ -25,17 +25,24 @@ class SpecHelperPartial
     'From Action | ' << render_template("partial.erb")
   end
 
-  def recursive(locals = false)
-    respond render_template('recursive_locals.erb', :n => 1) if locals
+  def recursive
     @n = 1
   end
 
   def without_ext
-    render_template('title')
+    render_template('partial')
   end
 end
 
-Innate.options.app.root = File.dirname(__FILE__)
+class SpecHelperPartialWithLayout < SpecHelperPartial
+  Innate.node '/with_layout'
+  layout('layout')
+  view_root '/'
+
+  def layout 
+    '<h1>with layout</h1><%= @content %>'
+  end
+end
 
 describe Innate::Helper::Partial do
   behaves_like :mock
@@ -61,6 +68,10 @@ describe Innate::Helper::Partial do
   end
 
   should 'not require file extension' do
-    get('/without_ext').body.should == 'Title'
+    get('/without_ext').body.should == "From Partial \n"
+  end
+
+  should 'render template with layout' do
+    get('/with_layout/without_ext').body.should == "<h1>with layout</h1>From Partial \n"
   end
 end

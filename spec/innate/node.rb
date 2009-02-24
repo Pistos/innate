@@ -5,9 +5,7 @@ Innate.options.app.view = ''
 Innate.options.app.layout = 'node'
 
 class SpecNode
-  include Innate::Node
-  map '/'
-  provide :html => :erb, :erb => :none
+  Innate.node('/').provide(:html => :erb, :erb => :none)
 
   def foo; end
   def bar; end
@@ -18,10 +16,7 @@ class SpecNode
 end
 
 class SpecNodeProvide
-  include Innate::Node
-  map '/provide'
-
-  provide :html => :erb, :erb => :none
+  Innate.node('/provide').provide(:html => :erb, :erb => :none)
 
   def foo
     '<%= 21 * 2 %>'
@@ -33,10 +28,8 @@ class SpecNodeProvide
 end
 
 class SpecNodeProvideTemplate
-  include Innate::Node
-  map '/provide_template'
-
-  provide :html => :erb, :erb => :none
+  Innate.node('/provide_template')
+  provide(:html => :erb, :erb => :none, :yaml => :yaml, :json => :json)
 
   view_root 'node'
 end
@@ -52,13 +45,34 @@ class SpecNodeWithLayout < SpecNodeProvide
   map '/layout'
 end
 
+class SpecNodeWithLayoutView < SpecNodeProvide
+  view_root 'node/another_layout'
+  layout 'another_layout'
+  map '/another_layout'
+end
+
+class SpecNodeWithLayoutMethod < SpecNodeProvide
+  map '/layout_method'
+  layout 'layout_method'
+
+  def layout_method
+    '<div class="content"><%= @content %></div>'
+  end
+end
+
 class SpecNodeIndex
-  include Innate::Node
-  map '/spec_index'
+  Innate.node('/spec_index')
 
   def index
     "I have no parameters"
   end
+end
+
+class SpecNodeAliasView < SpecNodeProvideTemplate
+  map '/alias_view'
+  view_root 'node'
+
+  alias_view :aliased, :bar
 end
 
 describe 'Innate::Node' do
@@ -70,6 +84,12 @@ describe 'Innate::Node' do
     hash.each do |key, value|
       result[key.to_s].should == value
     end
+  end
+
+  def assert_wish(url, body, content_type)
+    got = get(url)
+    got.body.strip.should == body
+    got.headers['Content-Type'].should == content_type
   end
 
   should 'resolve actions with methods' do
@@ -116,12 +136,6 @@ describe 'Innate::Node' do
     SpecNodeSub.resolve('/bar').should.be.nil
   end
 
-  def assert_wish(url, body, content_type)
-    got = get(url)
-    got.body.strip.should == body
-    got.headers['Content-Type'].should == content_type
-  end
-
   should 'provide html if no wish given' do
     assert_wish('/provide/foo', '42', 'text/html')
     assert_wish('/provide/bar', '42', 'text/html')
@@ -143,7 +157,7 @@ describe 'Innate::Node' do
     assert_wish('/provide_template/bar.erb', "<h1>Hello, World!</h1>",
                 'text/html')
 
-    expected = (0..9).to_a.join
+    expected = '0123456789'
     assert_wish('/provide_template/foo.html', expected, 'text/html')
     # assert_wish('/provide_template/foo.erb', expected, 'text/plain')
   end
@@ -151,7 +165,7 @@ describe 'Innate::Node' do
   should 'respond with 404 if no action was found' do
     got = Innate::Mock.get('/does_not_exist')
     got.status.should == 404
-    got.body.should == 'Action not found at: "/does_not_exist"'
+    got.body.should == 'No action found at: "/does_not_exist"'
     got['Content-Type'].should == 'text/plain'
   end
 
@@ -172,9 +186,39 @@ describe 'Innate::Node' do
     got['Content-Type'].should == 'text/html'
   end
 
+  should 'find layout with view_root' do
+    got = Innate::Mock.get('/another_layout/bar')
+    got.status.should == 200
+    got.body.should == %(<div class="content">\n  42\n</div>\n)
+    got['Content-Type'].should == 'text/html'
+  end
+
+  should 'find layout from method' do
+    got = Innate::Mock.get('/layout_method/bar')
+    got.status.should == 200
+    got.body.should == %(<div class="content">42</div>)
+    got['Content-Type'].should == 'text/html'
+  end
+
   should 'not get an action with wrong parameters' do
     got = Innate::Mock.get('/spec_index/bar')
     got.status.should == 404
-    got.body.should == 'Action not found at: "/bar"'
+    got.body.should == 'No action found at: "/bar"'
+  end
+
+  should 'get an action view if there is no method' do
+    got = Innate::Mock.get('/provide_template/only_view')
+    got.status.should == 200
+    got.body.strip.should == "Only template"
+  end
+
+  should 'not get an action view with params if there is no method' do
+    got = Innate::Mock.get('/provide_template/only_view/param')
+    got.status.should == 404
+    got.body.strip.should == 'No action found at: "/only_view/param"'
+  end
+
+  should 'use alias_view' do
+    assert_wish('/alias_view/aliased', "<h1>Hello, World!</h1>", 'text/html')
   end
 end

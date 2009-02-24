@@ -55,30 +55,32 @@ module Innate
       # current controller.
       #
       # TODO:
-      # * the local variable hack isn't working because innate allocates a new
-      #   binding
-      #   For now one can simply use instance variables, which I prefer anyway.
       # * Doesn't work for absolute paths, but there are no specs for that yet.
+      # * the local variable hack isn't working because innate allocates a new
+      #   binding.
+      #   For now one can simply use instance variables, which I prefer anyway.
+      #
+      # the local binding hack:
+      #
+      #   variables.each do |key, value|
+      #     value = "ObjectSpace._id2ref(#{value.object_id})"
+      #     eval "#{key} = #{value}", action.binding
+      #   end
+
       def render_template(path, variables = {})
         path = path.to_s
 
         ext = File.extname(path)
         basename = File.basename(path, ext)
-        ext = ext[1..-1]
-
+        ext = ext[1..-1] || action.node.provide[action.wish].to_s
+        
         action = Innate::Current.action.dup
-        action.view   = action.node.find_view(basename, ext)
-        action.method = action.node.find_method(basename, action.params)
+        action.layout    = nil
+        action.view      = action.node.find_view(basename, ext)
+        action.method    = action.node.find_method(basename, action.params)
+        action.variables = action.variables.merge(variables)
         action.sync_variables(action)
-        action.variables.merge!(variables)
-
-=begin
-        variables.each do |key, value|
-          value = "ObjectSpace._id2ref(#{value.object_id})"
-          eval "#{key} = #{value}", action.binding
-        end
-=end
-
+        
         action.call
       end
 

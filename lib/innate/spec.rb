@@ -1,7 +1,7 @@
 require 'bacon'
 
 Bacon.summary_on_exit
-Bacon.extend(Bacon::TestUnitOutput)
+# Bacon.extend(Bacon::TestUnitOutput)
 
 innate = File.expand_path(File.join(File.dirname(__FILE__), '../innate'))
 require(innate) unless defined?(Innate)
@@ -10,7 +10,7 @@ module Innate
   # minimal middleware, no exception handling
   middleware(:innate){|m| m.innate }
 
-  # skip merging of options
+  # skip starting adapter
   options.started = true
 end
 
@@ -36,7 +36,27 @@ shared :session do
 end
 
 shared :mock do
-  def get(*args)
-    Innate::Mock.get(*args)
+  def get(*args) Innate::Mock.get(*args) end
+  def post(*args) Innate::Mock.post(*args) end
+end
+
+shared :multipart do
+  def multipart(hash)
+    boundary = 'MuLtIpArT56789'
+    data = []
+    hash.each do |key, value|
+      data << "--#{boundary}"
+      data << %(Content-Disposition: form-data; name="#{key}")
+      data << '' << value
+    end
+    data << "--#{boundary}--"
+    body = data.join("\r\n")
+
+    type = "multipart/form-data; boundary=#{boundary}"
+    length = body.respond_to?(:bytesize) ? body.bytesize : body.size
+
+    { 'CONTENT_TYPE' => type,
+      'CONTENT_LENGTH' => length.to_s,
+      :input => StringIO.new(body) }
   end
 end
