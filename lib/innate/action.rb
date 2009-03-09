@@ -1,6 +1,6 @@
 module Innate
   ACTION_MEMBERS = [ :node, :method, :params, :view, :layout, :instance, :exts,
-                     :wish, :options, :variables, :value, :view_value, :name ]
+    :wish, :options, :variables, :value, :view_value, :engine ]
 
   class Action < Struct.new(*ACTION_MEMBERS)
     # Holds the default values for merging in {Action::create}
@@ -14,6 +14,11 @@ module Innate
     # @author manveru
     def self.create(hash = {})
       new(*DEFAULT.merge(hash.to_hash).values_at(*ACTION_MEMBERS))
+    end
+
+    def merge!(hash)
+      hash.each_pair{|key, value| send("#{key}=", value) }
+      self
     end
 
     # Call the Action instance, will insert itself temporarily into
@@ -97,35 +102,10 @@ module Innate
         self.value = instance.__send__(method, *params) if method
         self.view_value = File.read(view) if view
 
-        content_type, body = send(Innate.options.action.wish[wish] || :as_html)
-        response = Current.response
-        response['Content-Type'] ||= content_type if response
-
+        body, content_type = wrap_in_layout{ engine.call(self, view_value || value) }
+        options[:content_type] ||= content_type if content_type
         body
       end
-    end
-
-    # @return [Array] Content-Type and rendered action
-    # @see Action#render Action#wrap_in_layout
-    # @author manveru
-    def as_html
-      return 'text/html', wrap_in_layout{ fulfill_wish(view_value || value) }
-    end
-
-    # @return [Array] Content-Type and rendered action
-    # @see Action#render Action#wrap_in_layout
-    # @author manveru
-    def as_yaml
-      require 'yaml'
-      return 'text/yaml', (value || view_value).to_yaml
-    end
-
-    # @return [Array] Content-Type and rendered action
-    # @see Action#render Action#wrap_in_layout
-    # @author manveru
-    def as_json
-      require 'json'
-      return 'application/json', (value || view_value).to_json
     end
 
     # @param [String, #to_str] string to be rendered
@@ -137,12 +117,8 @@ module Innate
       way = File.basename(view).gsub!(/.*?#{wish}\./, '') if view
       way ||= node.provide[wish] || node.provide['html']
 
-      if way
-        # Rack::Mime.mime_type(".#{wish}", 'text/html')
-        View.get(way).render(self, string)
-      else
-        raise("No templating engine was found for %p" % way)
-      end
+      return View.render(way, self, string || view) if way
+      raise("No templating engine was found for %p" % way)
     end
 
     def wrap_in_layout
@@ -152,8 +128,9 @@ module Innate
       action.view, action.method = layout_view_or_method(*layout)
       action.layout = nil
       action.sync_variables(self)
-      action.variables[:content] = yield
-      action.call
+      body, content_type = yield
+      action.variables[:content] = body
+      return action.call, content_type
     end
 
     def layout_view_or_method(name, arg)

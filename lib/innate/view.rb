@@ -8,8 +8,16 @@ module Innate
 
     module_function
 
-    # Try to obtain given engine by its registered name.
+    def exts_of(engine)
+      name = engine.to_s
+      ENGINE.reject{|k,v| v != name }.keys
+    end
 
+    def render(ext, action, string)
+      get(ext).render(action, string)
+    end
+
+    # Try to obtain given engine by its registered name.
     def get(engine_or_ext)
       return unless engine_or_ext
       eoe = Array[*engine_or_ext].first.to_s
@@ -19,7 +27,7 @@ module Innate
       elsif klass = ENGINE[eoe]
         TEMP[eoe] = obtain(klass)
       else
-        TEMP[eoe] = const_get(eoe.capitalize)
+        TEMP[eoe] = const_get(eoe)
       end
     end
 
@@ -27,7 +35,6 @@ module Innate
     # class will cause race conditions and one call may return the wrong class
     # on the first request (before TEMP is set).
     # No mutex is used in Fiber environment, see Innate::State and subclasses.
-
     def obtain(klass)
       STATE.sync do
         obj = Object
@@ -45,11 +52,9 @@ module Innate
     def register(klass, *exts)
       exts.each do |ext|
         ext = ext.to_s
-        if k = ENGINE[ext]
-          Log.warn "#{ext} is assigned to #{k} already"
-        else
-          ENGINE[ext] = klass
-        end
+        k = ENGINE[ext]
+        Log.warn("overwriting %p which is set to %p already" % [ext, k]) if k
+        ENGINE[ext] = klass
       end
     end
 
@@ -60,8 +65,7 @@ module Innate
       register("#{self}::#{name}", *exts)
     end
 
-    auto_register :None, :css
-    auto_register :None, :html, :htm
+    auto_register :None, :css, :html, :htm
     auto_register :ERB,  :erb
   end
 end

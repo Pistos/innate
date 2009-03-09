@@ -38,7 +38,7 @@ module Innate
     DEFAULT_HELPERS = %w[aspect cgi flash link partial redirect send_file]
     NODE_LIST = Set.new
 
-    trait(:layout => nil, :alias_view => {}, :provide => {},
+    trait(:layout => nil, :alias_view => {}, :provide => {}, :app => :pristine,
           :method_arities => {}, :wrap => [:aspect_wrap], :provide_set => false)
 
     # Upon inclusion we make ourselves comfortable.
@@ -51,7 +51,7 @@ module Innate
       NODE_LIST << into
 
       return if into.ancestral_trait[:provide_set]
-      into.provide(:html => :erb, :yaml => :yaml, :json => :json)
+      into.provide(:html, :ERB)
       into.trait(:provide_set => false)
     end
 
@@ -126,14 +126,23 @@ module Innate
     # /feed.rss will wrap /view/feed.rss.erb in /layout/default.rss.erb
     # /index    will wrap /view/index.erb    in /layout/default.erb
 
-    def provide(formats = {})
-      return ancestral_trait[:provide] if formats.empty?
+    def provide(format, options = {}, &block)
+      if options.respond_to?(:to_hash)
+        options = options.to_hash
+        handler = block || View.get(options[:engine])
+        content_type = options[:type]
+      else
+        handler = View.get(options)
+      end
 
-      hash = {}
-      formats.each{|pr, as| hash[pr.to_s] = Array[*as].map{|a| a.to_s } }
-      trait(:provide => hash, :provide_set => true)
+      raise(ArgumentError, "Need an engine or block") unless handler
 
-      ancestral_trait[:provide]
+      trait("#{format}_handler"      => handler, :provide_set => true)
+      trait("#{format}_content_type" => content_type) if content_type
+    end
+
+    def provides
+      ancestral_trait.reject{|k,v| k !~ /_handler$/ }
     end
 
     # This makes the Node a valid application for Rack.
@@ -163,7 +172,6 @@ module Innate
 
       response.reset
       response = try_resolve(path)
-      response['Content-Type'] ||= 'text/html'
 
       Current.session.flush(response)
 
@@ -186,14 +194,15 @@ module Innate
     # @param [Innate::Action] action
     # @return [Innate::Response]
     def action_found(action)
-      result = catch(:respond){ catch(:redirect){ action.call }}
+      response = catch(:respond){ catch(:redirect){ action.call }}
 
-      if result.respond_to?(:finish)
-        return result
-      else
-        Current.response.write(result)
-        return Current.response
+      unless response.respond_to?(:finish)
+        self.response.write(response)
+        response = self.response
       end
+
+      response['Content-Type'] ||= action.options[:content_type]
+      response
     end
 
     # The default handler in case no action was found, kind of method_missing.
@@ -245,24 +254,33 @@ module Innate
     # @see Node::find_provide Node::update_method_arities Node::find_action
     # @author manveru
     def resolve(path)
-      name, wish = find_provide(path)
+      name, wish, engine = find_provide(path)
+      action = Action.create(:node => self, :wish => wish, :engine => engine)
+
+      if content_type = ancestral_trait["#{wish}_content_type"]
+        action.options = {:content_type => content_type}
+      end
+
       update_method_arities
-      find_action(name, wish)
+      fill_action(action, name)
     end
 
     # @param [String] path
-    # @return [Array] with name and wish
-    # @see Node::provide
+    # @return [Array] with name, wish, engine
+    # @see Node::provide Node::provides
     # @author manveru
     def find_provide(path)
-      name, wish = path, 'html'
+      pr = provides
 
-      provide.find do |key, value|
+      name, wish, engine = path, 'html', pr['html_handler']
+
+      pr.find do |key, value|
+        key = key[/(.*)_handler$/, 1]
         next unless path =~ /^(.+)\.#{key}$/i
-        name, wish = $1, key
+        name, wish, engine = $1, key, value
       end
 
-      return name, wish
+      return name, wish, engine
     end
 
     # Now we're talking Action, we try to find a matching template and method,
@@ -273,22 +291,19 @@ module Innate
     # @param [String] given_name the name extracted from REQUEST_PATH
     # @param [String] wish
     # @author manveru
-    def find_action(given_name, wish)
+    def fill_action(action, given_name)
       needs_method = Innate.options.action.needs_method
+      wish = action.wish
 
       patterns_for(given_name) do |name, params|
         method = find_method(name, params)
-        view = find_view(name, wish)
 
-        next unless view or method
         next unless method if needs_method
         next unless method if params.any?
+        next unless (view = find_view(name, wish)) or method
 
-        layout = find_layout(name, wish)
-        params ||= []
-
-        Action.create(:method => method, :params => params, :layout => layout,
-                      :node => self, :view => view, :wish => wish)
+        action.merge!(:method => method, :view => view, :params => params,
+                      :layout => find_layout(name, wish))
       end
     end
 
@@ -380,16 +395,18 @@ module Innate
       aliased = find_aliased_view(file, wish)
       return aliased if aliased
 
-      path = [Innate.options.app.root, Innate.options.app.view, view_root, file]
-      to_template(path, wish)
+      to_template([app_root, app_view, view_root, file], wish)
     end
 
     # This is done to make you feel more at home, pass an absolute path or a
     # path relative to your application root to set it, otherwise you'll get
     # the current mapping.
     def view_root(location = nil)
-      return @view_root = location if location
-      @view_root ||= Innate.to(self)
+      location ? (@view_root = location) : (@view_root ||= Innate.to(self))
+    end
+
+    def layout_root(location = nil)
+      location ? (@layout_root = location) : (@layout_root ||= '/')
     end
 
     # Aliasing one view from another.
@@ -444,28 +461,7 @@ module Innate
     # @see Node::to_template
     # @author manveru
     def to_layout(file, wish)
-      path = [Innate.options.app.root, Innate.options.app.layout, file]
-      to_template(path, wish)
-    end
-
-    # @param [String] file
-    # @param [String] wish
-    # @return [nil String] the absolute path to the template or nil
-    # @see Node::find_view Node::to_layout Node::find_aliased_view
-    # @author manveru
-    def to_template(path, wish)
-      return unless path.all?
-
-      path = File.join(*path.map{|pa| pa.to_s.split('__') }.flatten)
-      exts = (Array[provide[wish]] + provide.keys).flatten.compact.uniq.join(',')
-      glob = "#{path}.{#{wish}.,#{wish},}{#{exts},}"
-      found = Dir[glob].uniq
-
-      if found.size > 1
-        Log.warn("%d views found for %p | %p" % [found.size, path, wish])
-      end
-
-      found.first
+      to_template([app_root, app_layout, layout_root, file], wish)
     end
 
     # Define a layout to use on this Node.
@@ -535,6 +531,65 @@ module Innate
       return nil
     end
 
+    # @param [String] file
+    # @param [String] wish
+    # @return [nil String] the absolute path to the template or nil
+    # @see Node::find_view Node::to_layout Node::find_aliased_view
+    # @author manveru
+    def to_template(path, wish)
+      return unless exts = ext_glob(wish)
+      glob = "#{path_glob(*path)}.#{exts}"
+      found = Dir[glob].uniq
+
+      count = found.size
+      Log.warn("%d views found for %p.%p" % [count, path, wish]) if count > 1
+
+      found.first
+    end
+
+    def path_glob(*elements)
+      File.join(elements.map{|element|
+        "{%s}" % [*element].map{|e| e.gsub('__', '/') }.join(',')
+      }).gsub(/\/\{\/?\}\//, '/')
+    end
+
+    # 'erb' => '{erb,erb.html,erb.json,erb.yaml}'
+    # 'html' => '{nag,xhtml,nag.html,xhtml.html,nag.json,xhtml.json,nag.yaml,xhtml.yaml}'
+    # 'html' => 'file.{html,json,yaml,}{.nag,.xhtml}'
+    #
+    # <action>.<rep>.<engine-ext>
+    #
+    # foo.html.erb
+    # foo.rss.erb
+    # foo.atom.erb
+    # foo.json.erb
+    # foo.yaml.erb
+    # foo.en.erb
+    # foo.jp.erb
+    # foo.erb
+    #
+    # provide :html => [:erb], :rss => [:erb], :atom => [:nag], :yaml => [:erb]
+    #
+    # /foo.yaml
+    # # => foo.yaml.erb
+    # # => foo.erb
+    #
+    # /foo.rss
+    # # => foo.rss.erb
+    # # => foo.erb
+    #
+    # foo.atom
+    # # => foo.atom.nag
+    # # => foo.nag
+
+    def ext_glob(wish)
+      pr = provides
+      return unless engine = pr["#{wish}_handler"]
+      engine_exts = View.exts_of(engine).join(',')
+      represented = [*wish].map{|k| "#{k}." }.join(',')
+      "{%s,}{%s}" % [represented, engine_exts]
+    end
+
     # This awesome piece of hackery implements action AOP, methods may register
     # themself in the trait[:wrap] and will be called in left-to-right order,
     # each being passed the action instance and a block that they have to yield
@@ -549,8 +604,8 @@ module Innate
     # @author manveru
     def wrap_action_call(action, &block)
       wrap = ancestral_trait[:wrap]
-
-      head, tail = wrap[0], wrap[1..-1].reverse
+      head, *tail = wrap
+      tail.reverse!
       combined = tail.inject(block){|s,v| lambda{ __send__(v, action, &s) } }
       __send__(head, action, &combined)
     end
@@ -560,7 +615,13 @@ module Innate
     # @return [Binding] binding of the instance being rendered.
     # @see Action#binding
     # @author manveru
-    def binding; super; end
+    def binding; super end
+
+    def options; Innate.options[:app, ancestral_trait[:app]] end
+
+    def app_root; options[:root] end
+    def app_view; options[:view] end
+    def app_layout; options[:layout] end
   end
 
   module SingletonMethods

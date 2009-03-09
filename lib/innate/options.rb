@@ -35,7 +35,7 @@ module Innate
     o "Indicates which default middleware to use, (:dev|:live)",
       :mode, :dev
 
-    trigger(:mode){|v| Innate.setup_middleware(true) }
+    trigger(:mode){|v| Innate.middleware_recompile(v) }
 
     sub :log do
       o "Array of parameters for Logger.new, default to stderr for CGI",
@@ -62,22 +62,27 @@ module Innate
       o "Unique identifier for this application",
         :name, 'pristine'
 
-      o "Root directory containing the application",
-        :root, File.dirname($0)
+      o "Root directories containing the application",
+        :root, [File.dirname($0)]
 
-      o "Root directory for view templates, relative to app subdir",
-        :view, '/view'
+      o "Root directories for view templates, relative to app root",
+        :view, ['view']
 
-      o "Root directory for layout templates, relative to app subdir",
-        :layout, '/layout'
+      o "Root directories for layout templates, relative to app root",
+        :layout, ['layout']
+
+      o "Root directories for static public files, relative to app root",
+        :public, ['public']
 
       o "Prefix of this application",
         :prefix, '/'
 
-      o "Root directory for static public files",
-        :public, '/public'
-
       trigger(:public){|v| Innate.middleware_recompile }
+
+      sub :pristine do
+        o "Unique identifier for this application",
+          :name, 'pristine'
+      end
     end
 
     sub :session do
@@ -93,8 +98,10 @@ module Innate
       o "Use secure cookie",
         :secure, false
 
+      # Time.at(2147483647) # => Tue Jan 19 12:14:07 +0900 2038
+      # Hopefully we all have 64bit systems by then
       o "Time of cookie expiration",
-        :expires, Time.at(2147483647)
+        :expires, Time.at((1 << 31) - 1)
     end
 
     sub :cache do

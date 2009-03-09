@@ -1,8 +1,8 @@
 module Innate
   module View
     module None
-      def self.render(action, string = nil)
-        string || action.view
+      def self.call(action, string)
+        return string, 'text/html'
       end
     end
   end

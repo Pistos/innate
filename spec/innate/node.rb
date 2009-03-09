@@ -5,7 +5,9 @@ Innate.options.app.view = ''
 Innate.options.app.layout = 'node'
 
 class SpecNode
-  Innate.node('/').provide(:html => :erb, :erb => :none)
+  Innate.node('/')
+  provide(:html, :ERB)
+  provide(:erb, :None)
 
   def foo; end
   def bar; end
@@ -16,7 +18,9 @@ class SpecNode
 end
 
 class SpecNodeProvide
-  Innate.node('/provide').provide(:html => :erb, :erb => :none)
+  Innate.node('/provide')
+  provide(:html, :ERB)
+  provide(:erb, :None)
 
   def foo
     '<%= 21 * 2 %>'
@@ -29,9 +33,10 @@ end
 
 class SpecNodeProvideTemplate
   Innate.node('/provide_template')
-  provide(:html => :erb, :erb => :none, :yaml => :yaml, :json => :json)
-
   view_root 'node'
+
+  provide :html, :ERB
+  provide :erb, :None
 end
 
 class SpecNodeSub < SpecNode
@@ -136,47 +141,11 @@ describe 'Innate::Node' do
     SpecNodeSub.resolve('/bar').should.be.nil
   end
 
-  should 'provide html if no wish given' do
-    assert_wish('/provide/foo', '42', 'text/html')
-    assert_wish('/provide/bar', '42', 'text/html')
-  end
-
-  should 'provide html as wished' do
-    assert_wish('/provide/foo.html', '42', 'text/html')
-    assert_wish('/provide/bar.html', '42', 'text/html')
-  end
-
-  should 'provide erb as wished' do
-    assert_wish('/provide/foo.erb', "<%= 21 * 2 %>", 'text/html')
-    assert_wish('/provide/bar.erb', "<%= 84 / 2 %>", 'text/html')
-  end
-
-  should 'fulfill wish with templates' do
-    assert_wish('/provide_template/bar.html', "<h1>Hello, World!</h1>",
-                'text/html')
-    assert_wish('/provide_template/bar.erb', "<h1>Hello, World!</h1>",
-                'text/html')
-
-    expected = '0123456789'
-    assert_wish('/provide_template/foo.html', expected, 'text/html')
-    # assert_wish('/provide_template/foo.erb', expected, 'text/plain')
-  end
-
   should 'respond with 404 if no action was found' do
     got = Innate::Mock.get('/does_not_exist')
     got.status.should == 404
     got.body.should == 'No action found at: "/does_not_exist"'
     got['Content-Type'].should == 'text/plain'
-  end
-
-  should 'respond with yaml' do
-    assert_wish('/provide_template/bar.yaml', "--- |\n<h1>Hello, World!</h1>",
-                'text/yaml')
-  end
-
-  should 'respond with json' do
-    assert_wish('/provide_template/bar.json', '"<h1>Hello, World!<\\/h1>\\n"',
-                'application/json')
   end
 
   should 'wrap with layout' do

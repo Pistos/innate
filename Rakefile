@@ -75,7 +75,7 @@ Gem::Specification.new do |s|
   s.homepage = "http://github.com/manveru/innate"
   s.require_path = "lib"
 
-  s.add_dependency('rack', '>= 0.4.0')
+  s.add_dependency('rack', '>= 0.9.1')
 
   s.files = [
 #{files}
@@ -173,9 +173,6 @@ end
 desc 'install dependencies'
 task :setup do
   GemSetup.new do
-    github = 'http://gems.github.com'
-    Gem.sources << github
-
     gem('rack', '>=0.9.1')
     gem('bacon', '>=1.1.0')
 

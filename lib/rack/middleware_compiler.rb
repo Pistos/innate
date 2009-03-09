@@ -13,15 +13,18 @@ module Rack
     attr_reader :middlewares, :name
 
     def initialize(name)
-      @name = name
+      @name = name.to_sym
       @middlewares = []
       @compiled = nil
       yield(self) if block_given?
     end
 
-    # FIXME: Should we use `|` or `+`?
-    def use(*mws)
-      @middlewares = mws | @middlewares
+    def use(app, *args, &block)
+      @middlewares << [app, args, block]
+    end
+
+    def apps(*middlewares)
+      @middlewares.concat(middlewares.map{|mw| [mw, [], nil]})
     end
 
     def run(app)
@@ -36,9 +39,8 @@ module Rack
     def innate
       public_root = ::File.join(Innate.options.app.root.to_s,
                                 Innate.options.app.public.to_s)
-      cascade(
-        Rack::File.new(public_root),
-        Innate::Current.new(Innate::Route.new, Innate::Rewrite.new))
+      cascade(Rack::File.new(public_root),
+              Innate::Current.new(Innate::Route.new, Innate::Rewrite.new))
     end
 
     def static(path)
@@ -65,7 +67,8 @@ module Rack
     end
 
     def compile!
-      @compiled = @middlewares.inject(@app){|a,e| e.new(a) }
+      @compiled = @middlewares.inject(@app){|s, (app, args, block)|
+        app.new(s, *args, &block) }
       self
     end
   end
