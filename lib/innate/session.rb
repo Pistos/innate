@@ -3,16 +3,34 @@ module Innate
   # Mostly ported from Ramaze, but behaves lazy, no session will be created if
   # no session is used.
   #
-  # The way we do it is to keep session data in memory until #flush is called,
-  # at which point it will be persisted completely into the cache, no question
-  # asked.
+  # We keep session data in memory until #flush is called, at which point it
+  # will be persisted completely into the cache, no question asked.
   #
-  # NOTE:
-  #   * You may store anything in here that you may also store in the
-  #     corresponding store, usually it's best to keep it to things that are
-  #     safe to Marshal.
+  # You may store anything in here that you may also store in the corresponding
+  # store, usually it's best to keep it to things that are safe to Marshal.
+  #
+  # The default time of expiration is *
+  #
+  #   Time.at(2147483647) # => Tue Jan 19 12:14:07 +0900 2038
+  #
+  # Hopefully we all have 64bit systems by then.
 
   class Session
+    include Optional
+
+    options.dsl do
+      o "Key for the session cookie",
+        :key, 'innate.sid'
+      o "Domain the cookie relates to, unspecified if false",
+        :domain, false
+      o "Path the cookie relates to",
+        :path, '/'
+      o "Use secure cookie",
+        :secure, false
+      o "Time of cookie expiration",
+        :expires, Time.at((1 << 31) - 1)
+    end
+
     attr_reader :cookie_set, :request, :response, :flash
 
     def initialize(request, response)
@@ -71,10 +89,6 @@ module Innate
       Innate::Cache.session
     end
 
-    def options
-      Innate.options[:session]
-    end
-
     def set_cookie(response)
       return if @cookie_set || cookie
 
@@ -90,16 +104,19 @@ module Innate
         :expires => options.expires }
     end
 
-    def entropy
-      [ srand, rand, Time.now.to_f, rand, $$, rand, object_id ]
+    def generate_sid
+      begin sid = sid_algorithm end while cache[sid]
+      sid
     end
 
-    def generate_sid
-      begin
-        sid = Digest::SHA1.hexdigest(entropy.join)
-      end while cache[sid]
-
-      return sid
+    begin
+      require 'securerandom'
+      def sid_algorithm; SecureRandom.hex(32); end
+    rescue LoadError
+      def sid_algorithm
+        entropy = [ srand, rand, Time.now.to_f, rand, $$, rand, object_id ]
+        Digest::SHA2.hexdigest(entropy.join)
+      end
     end
   end
 end

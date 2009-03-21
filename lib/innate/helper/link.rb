@@ -28,23 +28,43 @@ module Innate
         hashes, names = args.partition{|arg| arg.respond_to?(:merge!) }
         hashes.each{|to_merge| hash.merge!(to_merge) }
 
-        prefix = Innate.options.app.prefix
-        location = Innate.to(self) || Innate.to(self.class)
-        front = Array[prefix, location, name, *names].join('/').squeeze('/')
+        location = route_location(self)
+        front = Array[location, name, *names].join('/').squeeze('/')
 
-        if hash.empty?
-          URI(front)
-        else
-          escape = Rack::Utils.method(:escape)
-          query = hash.map{|key, value| "#{escape[key]}=#{escape[value]}" }.join(';')
-          URI("#{front}?#{query}")
-        end
+        return URI(front) if hash.empty?
+
+        escape = Rack::Utils.method(:escape)
+        query = hash.map{|k, v| "#{escape[k]}=#{escape[v]}" }.join(';')
+        URI("#{front}?#{query}")
       end
       alias r route
+
+      def route_location(klass)
+        prefix = Innate.options.prefix
+        location = Innate.to(klass) || Innate.to(klass.class)
+        [prefix, location].join('/')
+      end
+
+      # Create a route to the currently active Node.
+      #
+      # This method is mostly here in case you include this helper elsewhere
+      # and don't want (or can't) type SomeNode.r all the time.
+      #
+      # The usage is identical with {route}.
+      #
+      # @param [#to_s] name
+      # @return [URI] to the location
+      # @see Ramaze::Helper::Link#route
+      # @author manveru
+      def route_self(name = '/', *args)
+        Current.action.node.route(name, *args)
+      end
+      alias rs route_self
 
       # Create a link tag
       #
       # Usage, given Wiki is mapped to `/wiki`:
+      #
       #   Wiki.a(:home)                   # => '<a href="/wiki/home">home</a>'
       #   Wiki.a('home', :home)           # => '<a href="/wiki/home">home</a>'
       #   Wiki.a('home', :/)              # => '<a href="/wiki/">home</a>'

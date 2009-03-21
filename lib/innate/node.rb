@@ -22,24 +22,36 @@ module Innate
   # {Innate::Session} instances, and all the standard helper methods as well as
   # the ability to simply add other helpers.
   #
-  # NOTE:
-  #   * Although I tried to minimize the amount of code in here there is still
-  #     quite a number of methods left in order to do ramaze-style lookups.
-  #     Those methods, and all other methods occurring in the ancestors after
-  #     {Innate::Node} will not be considered valid action methods and will be
-  #     ignored.
-  #   * This also means that method_missing will not see any of the requests
-  #     coming in.
-  #   * If you want an action to act as a catch-all, use `def index(*args)`.
-
+  # Please note that method_missing will _not_ be considered when building an
+  # {Action}. There might be future demand for this, but for now you can simply
+  # use `def index(*args); end` to make a catch-all action.
   module Node
     include Traited
 
     DEFAULT_HELPERS = %w[aspect cgi flash link partial redirect send_file]
     NODE_LIST = Set.new
 
-    trait(:layout => nil, :alias_view => {}, :provide => {}, :app => :pristine,
-          :method_arities => {}, :wrap => [:aspect_wrap], :provide_set => false)
+    # These traits are inherited into ancestors, changing a trait in an
+    # ancestor doesn't affect the higher ones.
+    #
+    #   class Foo; include Innate::Node; end
+    #   class Bar < Foo; end
+    #
+    #   Foo.trait[:wrap] == Bar.trait[:wrap] # => true
+    #   Bar.trait(:wrap => [:cache_wrap])
+    #   Foo.trait[:wrap] == Bar.trait[:wrap] # => false
+
+    trait :views          => []
+    trait :layouts        => []
+    trait :layout         => nil
+    trait :alias_view     => {}
+    trait :provide        => {}
+
+    # @see wrap_action_call
+    trait :wrap           => SortedSet.new
+    trait :provide_set    => false
+    trait :needs_method   => false
+    trait :skip_node_map  => false
 
     # Upon inclusion we make ourselves comfortable.
     def self.included(into)
@@ -50,89 +62,162 @@ module Innate
 
       NODE_LIST << into
 
-      return if into.ancestral_trait[:provide_set]
+      return if into.provide_set?
       into.provide(:html, :ERB)
       into.trait(:provide_set => false)
     end
 
+    # node mapping procedure
+    #
+    # when Node is included into an object, it's added to NODE_LIST
+    # when object::map(location) is sent, it maps the object into DynaMap
+    # when Innate.start is issued, it calls Node::setup
+    # Node::setup iterates NODE_LIST and maps all objects not in DynaMap by
+    # using Node::generate_mapping(object.name) as location
+    #
+    # when object::map(nil) is sent, the object will be skipped in Node::setup
+
     def self.setup
-      NODE_LIST.each{|node| Innate.map(node.mapping, node) }
-      Log.debug("Mapped Nodes: %p" % DynaMap::MAP)
+      NODE_LIST.each{|node|
+        node.map(generate_mapping(node.name)) unless node.trait[:skip_node_map]
+      }
+      # Log.debug("Mapped Nodes: %p" % DynaMap.to_hash) unless NODE_LIST.empty?
     end
 
-    # @return [String] the relative path to the node
-    def mapping
-      mapped = Innate.to(self)
-      return mapped if mapped
+    def self.generate_mapping(object_name = self.name)
       return '/' if NODE_LIST.size == 1
-      "/" << self.name.gsub(/\B[A-Z][^A-Z]/, '_\&').downcase
+      parts = object_name.split('::').map{|part|
+        part.gsub(/^[A-Z]+/){|sub| sub.downcase }.gsub(/[A-Z]+[^A-Z]/, '_\&')
+      }
+      '/' << parts.join('/').downcase
     end
 
-    # Shortcut to map or remap this Node
-    # @param [#to_s] location
-    def map(location)
-      Innate.map(location, self)
-    end
-
-    # This little piece of nasty looking code enables you to provide different
-    # content from a single action.
+    # Tries to find the relative url that this {Node} is mapped to.
+    # If it cannot find one it will instead generate one based on the
+    # snake_cased name of itself.
     #
-    # @example
+    # @example Usage:
     #
-    #   class Feeds
+    #   class FooBar
     #     include Innate::Node
-    #     map '/feed'
+    #   end
+    #   FooBar.mapping # => '/foo_bar'
     #
-    #     provide :html => :erb, :rss => :erb, :atom => :erb
+    # @return [String] the relative path to the node
     #
-    #     def index
-    #       @feed = build_some_feed
+    # @api external
+    # @see Innate::SingletonMethods#to
+    # @author manveru
+    def mapping
+      Innate.to(self)
+    end
+
+    # Shortcut to map or remap this Node.
+    #
+    # @example Usage for explicit mapping:
+    #
+    #   class FooBar
+    #     include Innate::Node
+    #     map '/foo_bar'
+    #   end
+    #
+    #   Innate.to(FooBar) # => '/foo_bar'
+    #
+    # @example Usage for automatic mapping:
+    #
+    #   class FooBar
+    #     include Innate::Node
+    #     map mapping
+    #   end
+    #
+    #   Innate.to(FooBar) # => '/foo_bar'
+    #
+    # @param [#to_s] location
+    #
+    # @api external
+    # @see Innate::SingletonMethods::map
+    # @author manveru
+    def map(location)
+      trait :skip_node_map => true
+      Innate.map(location, self) if location
+    end
+
+    # Specify which way contents are provided and processed.
+    #
+    # Use this to set a templating engine, custom Content-Type, or pass a block
+    # to take over the processing of the {Action} and template yourself.
+    #
+    # Provides set via this method will be inherited into subclasses.
+    #
+    # The +format+ is extracted from the PATH_INFO, it simply represents the
+    # last extension name in the path.
+    #
+    # The provide also has influence on the chosen templates for the {Action}.
+    #
+    # @example providing RSS with ERB templating
+    #
+    #   provide :rss, :engine => :ERB
+    #
+    # Given a request to `/list.rss` the template lookup first tries to find
+    # `list.rss.erb`, if that fails it falls back to `list.erb`.
+    # If neither of these are available it will try to use the return value of
+    # the method in the {Action} as template.
+    #
+    # A request to `/list.yaml` would match the format 'yaml'
+    #
+    # @example providing a yaml version of actions
+    #
+    #   class Articles
+    #     include Innate::Node
+    #     map '/article'
+    #
+    #     provide(:yaml, :type => 'text/yaml'){|action, value| value.to_yaml }
+    #
+    #     def list
+    #       @articles = Article.list
     #     end
     #   end
     #
-    # This will do following to these requests:
+    # @example providing plain text inspect version
     #
-    # /feed      # => call Feeds#index with template /view/feed/index.erb
-    # /feed.atom # => call Feeds#index with template /view/feed/index.atom.erb
-    # /feed.rss  # => call Feeds#index with template /view/feed/index.rss.erb
+    #   class Articles
+    #     include Innate::Node
+    #     map '/article'
     #
-    # If index.atom.erb isn't available we fall back to /view/feed/index.erb
+    #     provide(:txt, :type => 'text/plain'){|action, value| value.inspect }
     #
-    # So it's really easy to add your own content representation.
+    #     def list
+    #       @articles = Article.list
+    #     end
+    #   end
     #
-    # If no matching provider is found for the given extension it will fall
-    # back to the one specified for html.
+    # @param [Proc] block
+    #   upon calling the action, [action, value] will be passed to it and its
+    #   return value becomes the response body.
     #
-    # The correct templating engine is selected by matching the last extension
-    # of the template itself to the one set in Innate::View.
+    # @option param :engine [Symbol String]
+    #   Name of an engine for View::get
+    # @option param :type [String]
+    #   default Content-Type if none was set in Response
     #
-    # If you don't want that your response is passed through a templating
-    # engine, use :none like:
+    # @raise [ArgumentError] if neither a block nor an engine was given
     #
-    #   provide :txt => :none
+    # @api external
+    # @see View::get Node#provides
+    # @author manveru
     #
-    # So a request to
-    #
-    # /feed.txt # => call Feeds#index with template /view/feed/index.txt.erb
-    #
-    # NOTE: provides also have effect on the chosen layout for the action.
-    #
-    # Given a Node at '/' with `layout('default')`:
-    #   /layout/default.erb
-    #   /layout/default.rss.erb
-    #   /view/index.erb
-    #   /view/feed.rss.erb
-    #
-    # /feed.rss will wrap /view/feed.rss.erb in /layout/default.rss.erb
-    # /index    will wrap /view/index.erb    in /layout/default.erb
+    # @todo
+    #   The comment of this method may be too short for the effects it has on
+    #   the rest of Innate, if you feel something is missing please let me
+    #   know.
 
-    def provide(format, options = {}, &block)
-      if options.respond_to?(:to_hash)
-        options = options.to_hash
-        handler = block || View.get(options[:engine])
-        content_type = options[:type]
+    def provide(format, param = {}, &block)
+      if param.respond_to?(:to_hash)
+        param = param.to_hash
+        handler = block || View.get(param[:engine])
+        content_type = param[:type]
       else
-        handler = View.get(options)
+        handler = View.get(param)
       end
 
       raise(ArgumentError, "Need an engine or block") unless handler
@@ -159,12 +244,18 @@ module Innate
     # We do however log errors at some vital points in order to provide you
     # with feedback in your logs.
     #
-    # NOTE:
-    #   * A lot of functionality in here relies on the fact that call is
-    #     executed within Innate::STATE.wrap which populates the variables used
-    #     by Trinity.
-    #   * If you use the Node directly as a middleware make sure that you #use
-    #     Innate::Current as a middleware before it.
+    # A lot of functionality in here relies on the fact that call is executed
+    # within Innate::STATE.wrap which populates the variables used by Trinity.
+    # So if you use the Node directly as a middleware make sure that you #use
+    # Innate::Current as a middleware before it.
+    #
+    # @param [Hash] env
+    #
+    # @return [Array]
+    #
+    # @api external
+    # @see Response#reset Node#try_resolve Session#flush
+    # @author manveru
 
     def call(env)
       path = env['PATH_INFO']
@@ -179,20 +270,32 @@ module Innate
     end
 
     # Let's try to find some valid action for given +path+.
-    # Otherwise we dispatch to action_missing
+    # Otherwise we dispatch to {action_missing}.
     #
-    # @param [String] path from request['REQUEST_PATH']
+    # @param [String] path from env['PATH_INFO']
+    #
+    # @return [Response]
+    #
+    # @api external
+    # @see Node#resolve Node#action_found Node#action_missing
+    # @author manveru
     def try_resolve(path)
       action = resolve(path)
       action ? action_found(action) : action_missing(path)
     end
 
-    # Executed once an Action has been found.
+    # Executed once an {Action} has been found.
+    #
     # Reset the {Innate::Response} instance, catch :respond and :redirect.
     # {Action#call} has to return a String.
     #
-    # @param [Innate::Action] action
+    # @param [Action] action
+    #
     # @return [Innate::Response]
+    #
+    # @api external
+    # @see Action#call Innate::Response
+    # @author manveru
     def action_found(action)
       response = catch(:respond){ catch(:redirect){ action.call }}
 
@@ -236,7 +339,10 @@ module Innate
     #   end
     #
     # @param [String] path
-    # @see Innate::Response Node::try_resolve
+    #
+    # @api external
+    # @see Innate::Response Node#try_resolve
+    # @author manveru
     def action_missing(path)
       response.status = 404
       response['Content-Type'] = 'text/plain'
@@ -250,7 +356,10 @@ module Innate
     # html.
     #
     # @param [String] path
-    # @return [nil Action]
+    #
+    # @return [nil, Action]
+    #
+    # @api external
     # @see Node::find_provide Node::update_method_arities Node::find_action
     # @author manveru
     def resolve(path)
@@ -265,8 +374,13 @@ module Innate
       fill_action(action, name)
     end
 
+    # Resolve possible provides for the given +path+ from {provides}.
+    #
     # @param [String] path
+    #
     # @return [Array] with name, wish, engine
+    #
+    # @api internal
     # @see Node::provide Node::provides
     # @author manveru
     def find_provide(path)
@@ -283,16 +397,22 @@ module Innate
       return name, wish, engine
     end
 
-    # Now we're talking Action, we try to find a matching template and method,
-    # if we can't find either we go to the next pattern, otherwise we answer
-    # with an Action with everything we know so far about the demands of the
-    # client.
+    # Now we're talking {Action}, we try to find a matching template and
+    # method, if we can't find either we go to the next pattern, otherwise we
+    # answer with an {Action} with everything we know so far about the demands
+    # of the client.
     #
     # @param [String] given_name the name extracted from REQUEST_PATH
     # @param [String] wish
+    #
+    # @return [Action, nil]
+    #
+    # @api internal
+    # @see Node#find_method Node#find_view Node#find_layout Node#patterns_for
+    #      Action#wish Action#merge!
     # @author manveru
     def fill_action(action, given_name)
-      needs_method = Innate.options.action.needs_method
+      needs_method = self.needs_method?
       wish = action.wish
 
       patterns_for(given_name) do |name, params|
@@ -307,6 +427,22 @@ module Innate
       end
     end
 
+    # Try to find a suitable value for the layout. This may be a template or
+    # the name of a method.
+    #
+    # If a layout could be found, an Array with two elements is returned, the
+    # first indicating the kind of layout (:layout|:view|:method), the second
+    # the found value, which may be a String or Symbol.
+    #
+    # @param [String] name
+    # @param [String] wish
+    #
+    # @return [Array, nil]
+    #
+    # @api external
+    # @see Node#to_layout Node#find_method Node#find_view
+    # @author manveru
+    #
     # @todo allow layouts combined of method and view... hairy :)
     def find_layout(name, wish)
       return unless layout = ancestral_trait[:layout]
@@ -321,8 +457,8 @@ module Innate
       end
     end
 
-    # I hope this method talks for itself, we check arity if possible, but will
-    # happily dispatch to any method that has default parameters.
+    # We check arity if possible, but will happily dispatch to any method that
+    # has default parameters.
     # If you don't want your method to be responsible for messing up a request
     # you should think twice about the arguments you specify due to limitations
     # in Ruby.
@@ -351,10 +487,19 @@ module Innate
     #   def index(a = :a, b = :b)     # => -1
     #   def index(a = :a, b = :b, *r) # => -1
     #
+    # @param [String, Symbol] name
+    # @param [Array]         params
+    #
+    # @return [String, Symbol]
+    #
+    # @api external
+    # @see Node#fill_action Node#find_layout
+    # @author manveru
+    #
     # @todo Once 1.9 is mainstream we can use Method#parameters to do accurate
     #       prediction
     def find_method(name, params)
-      return unless arity = trait[:method_arities][name]
+      return unless arity = method_arities[name]
       name if arity == params.size or arity < 0
     end
 
@@ -371,42 +516,61 @@ module Innate
     #   Hi.update_method_arities
     #   # => {'index' => 0, 'foo' => -1, 'bar => 2}
     #
-    # @see Node::resolve
+    # @api internal
+    # @see Node#resolve
     # @return [Hash] mapping the name of the methods to their arity
     def update_method_arities
-      arities = {}
-      trait(:method_arities => arities)
+      @method_arities = {}
 
       exposed = ancestors & Helper::EXPOSE.to_a
       higher = ancestors.select{|a| a < Innate::Node }
 
       (higher + exposed).reverse_each do |ancestor|
         ancestor.public_instance_methods(false).each do |im|
-          arities[im.to_s] = ancestor.instance_method(im).arity
+          @method_arities[im.to_s] = ancestor.instance_method(im).arity
         end
       end
 
-      arities
+      @method_arities
     end
 
-    # Try to find the best template for the given basename and wish.
-    # Also, having extraordinarily much fun with globs.
+    attr_reader :method_arities
+
+    # Try to find the best template for the given basename and wish and respect
+    # aliased views.
+    #
+    # @param [#to_s] file
+    # @param [#to_s] wish
+    #
+    # @return [String, nil] depending whether a template could be found
+    #
+    # @api external
+    # @see Node#to_template Node#find_aliased_view
+    # @author manveru
     def find_view(file, wish)
       aliased = find_aliased_view(file, wish)
       return aliased if aliased
 
-      to_template([app_root, app_view, view_root, file], wish)
+      to_view(file, wish)
     end
 
-    # This is done to make you feel more at home, pass an absolute path or a
-    # path relative to your application root to set it, otherwise you'll get
-    # the current mapping.
-    def view_root(location = nil)
-      location ? (@view_root = location) : (@view_root ||= Innate.to(self))
-    end
-
-    def layout_root(location = nil)
-      location ? (@layout_root = location) : (@layout_root ||= '/')
+    # Try to find the best template for the given basename and wish.
+    #
+    # This method is mostly here for symetry with {to_layout} and to allow you
+    # overriding the template lookup easily.
+    #
+    # @param [#to_s] file
+    # @param [#to_s] wish
+    #
+    # @return [String, nil] depending whether a template could be found
+    #
+    # @api external
+    # @see {Node#find_view} {Node#to_template} {Node#root_mappings}
+    #      {Node#view_mappings} {Node#to_template}
+    # @author manveru
+    def to_view(file, wish)
+      path = root_mappings.concat(view_mappings) << file
+      to_template(path, wish)
     end
 
     # Aliasing one view from another.
@@ -434,7 +598,9 @@ module Innate
     #
     # @param [#to_s]      to   view that should be replaced
     # @param [#to_s]      from view to use or Node.
-    # @param [#nil? Node] node optionally obtain view from this Node
+    # @param [#nil?, Node] node optionally obtain view from this Node
+    #
+    # @api external
     # @see Node::find_aliased_view
     # @author manveru
     def alias_view(to, from, node = nil)
@@ -442,9 +608,14 @@ module Innate
       trait[:alias_view][to.to_s] = node ? [from.to_s, node] : from.to_s
     end
 
+    # Resolve one level of aliasing for the given +file+ and +wish+.
+    #
     # @param [String] file
     # @param [String] wish
-    # @return [nil String] the absolute path to the aliased template or nil
+    #
+    # @return [nil, String] the absolute path to the aliased template or nil
+    #
+    # @api internal
     # @see Node::alias_view Node::find_view
     # @author manveru
     def find_aliased_view(file, wish)
@@ -455,32 +626,55 @@ module Innate
 
     # Find the best matching file for the layout, if any.
     #
+    # This is mostly an abstract method that you might find handy if you want
+    # to do vastly different layout lookup.
+    #
     # @param [String] file
     # @param [String] wish
-    # @return [nil String] the absolute path to the template or nil
-    # @see Node::to_template
+    #
+    # @return [nil, String] the absolute path to the template or nil
+    #
+    # @api external
+    # @see {Node#to_template} {Node#root_mappings} {Node#layout_mappings}
     # @author manveru
     def to_layout(file, wish)
-      to_template([app_root, app_layout, layout_root, file], wish)
+      path = root_mappings.concat(layout_mappings) << file
+      to_template(path, wish)
     end
 
     # Define a layout to use on this Node.
     #
-    # @param [String #to_s] name basename without extension of the layout to use
-    # @param [Proc #call] block called on every dispatch if no name given
-    # @return [Proc String] The assigned name or block
+    # A Node can only have one layout, although the template being chosen can
+    # depend on {provides}.
     #
-    # @note The behaviour of Node#layout changed significantly from Ramaze,
-    #   instead of multitudes of obscure options and methods like deny_layout
-    #   we simply take a block and use the returned value as the name for the
-    #   layout. No layout will be used if the block returns nil.
+    # @param [String, #to_s] name basename without extension of the layout to use
+    # @param [Proc, #call] block called on every dispatch if no name given
+    #
+    # @return [Proc, String] The assigned name or block
+    #
+    # @api external
+    # @see Node#find_layout Node#layout_paths Node#to_layout Node#app_layout
+    # @author manveru
+    #
+    # NOTE:
+    #   The behaviour of Node#layout changed significantly from Ramaze, instead
+    #   of multitudes of obscure options and methods like deny_layout we simply
+    #   take a block and use the returned value as the name for the layout. No
+    #   layout will be used if the block returns nil.
     def layout(name = nil, &block)
       if name and block
+        # default name, but still check with block
         trait(:layout => lambda{|n, w| name if block.call(n, w) })
       elsif name
+        # name of a method or template
         trait(:layout => name.to_s)
       elsif block
+        # call block every request with name and wish, returned value is name
+        # of layout template or method
         trait(:layout => block)
+      else
+        # remove layout for this node
+        trait(:layout => nil)
       end
 
       return ancestral_trait[:layout]
@@ -499,7 +693,8 @@ module Innate
     # The last fallback will always be the index action with all of the path
     # turned into parameters.
     #
-    # @usage
+    # @example yielding possible combinations of action names and params
+    #
     #   class Foo; include Innate::Node; map '/'; end
     #
     #   Foo.patterns_for('/'){|action, params| p action => params }
@@ -515,6 +710,14 @@ module Innate
     #   # => {"foo__bar"=>["baz"]}
     #   # => {"foo"=>["bar", "baz"]}
     #   # => {"index"=>["foo", "bar", "baz"]}
+    #
+    # @param [String, #split] path usually the PATH_INFO
+    #
+    # @return [Action] it actually returns the first non-nil/false result of yield
+    #
+    # @api internal
+    # @see Node#fill_action
+    # @author manveru
     def patterns_for(path)
       atoms = path.split('/')
       atoms.delete('')
@@ -531,10 +734,48 @@ module Innate
       return nil
     end
 
-    # @param [String] file
+    # Try to find a template at the given +path+ for +wish+.
+    #
+    # Since Innate supports multiple paths to templates the +path+ has to be an
+    # Array that may be nested one level.
+    # The +path+ is then translated by {Node#path_glob} and the +wish+ by
+    # {Node#ext_glob}.
+    #
+    # @example Usage to find available templates
+    #
+    #   # This assumes following files:
+    #   # view/foo.erb
+    #   # view/bar.erb
+    #   # view/bar.rss.erb
+    #   # view/bar.yaml.erb
+    #
+    #   class FooBar
+    #     Innate.node('/')
+    #   end
+    #
+    #   FooBar.to_template(['.', 'view', '/', 'foo'], 'html')
+    #   # => "./view/foo.erb"
+    #   FooBar.to_template(['.', 'view', '/', 'foo'], 'yaml')
+    #   # => "./view/foo.erb"
+    #   FooBar.to_template(['.', 'view', '/', 'foo'], 'rss')
+    #   # => "./view/foo.erb"
+    #
+    #   FooBar.to_template(['.', 'view', '/', 'bar'], 'html')
+    #   # => "./view/bar.erb"
+    #   FooBar.to_template(['.', 'view', '/', 'bar'], 'yaml')
+    #   # => "./view/bar.yaml.erb"
+    #   FooBar.to_template(['.', 'view', '/', 'bar'], 'rss')
+    #   # => "./view/bar.rss.erb"
+    #
+    # @param [Array<Array<String>>, Array<String>] path
+    #   array containing strings and nested (1 level) arrays containing strings
     # @param [String] wish
-    # @return [nil String] the absolute path to the template or nil
-    # @see Node::find_view Node::to_layout Node::find_aliased_view
+    #
+    # @return [nil, String] relative path to the first template found
+    #
+    # @api external
+    # @see Node#find_view Node#to_layout Node#find_aliased_view
+    #      Node#path_glob Node#ext_glob
     # @author manveru
     def to_template(path, wish)
       return unless exts = ext_glob(wish)
@@ -542,72 +783,44 @@ module Innate
       found = Dir[glob].uniq
 
       count = found.size
-      Log.warn("%d views found for %p.%p" % [count, path, wish]) if count > 1
+      Log.warn("%d views found for %p" % [count, glob]) if count > 1
 
       found.first
     end
 
+    # Produce a glob that can be processed by Dir::[] matching the possible
+    # paths to the given +elements+.
+    #
+    # The +elements+ are an Array that may be nested one level, take care to
+    # splat if you try to pass an existing Array.
+    #
+    # @return [String] glob matching possible paths to the given +elements+
+    #
+    # @api internal
+    # @see Node#to_template
+    # @author manveru
     def path_glob(*elements)
       File.join(elements.map{|element|
-        "{%s}" % [*element].map{|e| e.gsub('__', '/') }.join(',')
+        "{%s}" % [*element].map{|e| e.to_s.gsub('__', '/') }.join(',')
       }).gsub(/\/\{\/?\}\//, '/')
     end
 
-    # 'erb' => '{erb,erb.html,erb.json,erb.yaml}'
-    # 'html' => '{nag,xhtml,nag.html,xhtml.html,nag.json,xhtml.json,nag.yaml,xhtml.yaml}'
-    # 'html' => 'file.{html,json,yaml,}{.nag,.xhtml}'
+    # Produce a glob that can be processed by Dir::[] matching the extensions
+    # associated with the given +wish+.
     #
-    # <action>.<rep>.<engine-ext>
+    # @param [#to_s] wish the extension (no leading '.')
     #
-    # foo.html.erb
-    # foo.rss.erb
-    # foo.atom.erb
-    # foo.json.erb
-    # foo.yaml.erb
-    # foo.en.erb
-    # foo.jp.erb
-    # foo.erb
+    # @return [String] glob matching the valid exts for the given +wish+
     #
-    # provide :html => [:erb], :rss => [:erb], :atom => [:nag], :yaml => [:erb]
-    #
-    # /foo.yaml
-    # # => foo.yaml.erb
-    # # => foo.erb
-    #
-    # /foo.rss
-    # # => foo.rss.erb
-    # # => foo.erb
-    #
-    # foo.atom
-    # # => foo.atom.nag
-    # # => foo.nag
-
+    # @api internal
+    # @see Node#to_template View::exts_of Node#provides
+    # @author manveru
     def ext_glob(wish)
       pr = provides
       return unless engine = pr["#{wish}_handler"]
       engine_exts = View.exts_of(engine).join(',')
       represented = [*wish].map{|k| "#{k}." }.join(',')
       "{%s,}{%s}" % [represented, engine_exts]
-    end
-
-    # This awesome piece of hackery implements action AOP, methods may register
-    # themself in the trait[:wrap] and will be called in left-to-right order,
-    # each being passed the action instance and a block that they have to yield
-    # to continue the chain.
-    #
-    # This enables things like action logging, caching, aspects,
-    # authentication, etc...
-    #
-    # @param [Action] action instance that is being passed to every registered method
-    # @param [Proc] block contains the instructions to call the action method if any
-    # @see Action#render
-    # @author manveru
-    def wrap_action_call(action, &block)
-      wrap = ancestral_trait[:wrap]
-      head, *tail = wrap
-      tail.reverse!
-      combined = tail.inject(block){|s,v| lambda{ __send__(v, action, &s) } }
-      __send__(head, action, &combined)
     end
 
     # For compatibility with new Kernel#binding behaviour in 1.9
@@ -617,11 +830,123 @@ module Innate
     # @author manveru
     def binding; super end
 
-    def options; Innate.options[:app, ancestral_trait[:app]] end
+    # make sure this is an Array and a new instance so modification on the
+    # wrapping array doesn't affect the original option.
+    # [*arr].object_id == arr.object_id if arr is an Array
+    #
+    # @return [Array] list of root directories
+    #
+    # @api external
+    # @author manveru
+    def root_mappings
+      [*options.roots].dup
+    end
 
-    def app_root; options[:root] end
-    def app_view; options[:view] end
-    def app_layout; options[:layout] end
+    # Set the paths for lookup below the Innate.options.views paths.
+    #
+    # @param [String, Array<String>] locations
+    #   Any number of strings indicating the paths where view templates may be
+    #   located, relative to Innate.options.roots/Innate.options.views
+    #
+    # @return [Node] self
+    #
+    # @api external
+    # @see {Node#view_mappings}
+    # @author manveru
+    def map_views(*locations)
+      trait :views => locations.flatten.uniq
+      self
+    end
+
+    # Combine Innate.options.views with either the `ancestral_trait[:views]`
+    # or the {Node#mapping} if the trait yields an empty Array.
+    #
+    # @return [Array<String>, Array<Array<String>>]
+    #
+    # @api external
+    # @see {Node#map_views}
+    # @author manveru
+    def view_mappings
+      paths = [*ancestral_trait[:views]]
+      paths = [mapping] if paths.empty?
+
+      [*options.views] + paths
+    end
+
+    # Set the paths for lookup below the Innate.options.layouts paths.
+    #
+    # @param [String, Array<String>] locations
+    #   Any number of strings indicating the paths where layout templates may
+    #   be located, relative to Innate.options.roots/Innate.options.layouts
+    #
+    # @return [Node] self
+    #
+    # @api external
+    # @see {Node#layout_mappings}
+    # @author manveru
+    def map_layouts(*locations)
+      trait :layouts => locations.flatten.uniq
+      self
+    end
+
+    # Combine Innate.options.layouts with either the `ancestral_trait[:layouts]`
+    # or the {Node#mapping} if the trait yields an empty Array.
+    #
+    # @return [Array<String>, Array<Array<String>>]
+    #
+    # @api external
+    # @see {Node#map_layouts}
+    # @author manveru
+    def layout_mappings
+      paths = [*ancestral_trait[:layouts]]
+      paths = [mapping] if paths.empty?
+
+      [*options.layouts] + paths
+    end
+
+    def options
+      Innate.options
+    end
+
+    # Whether an {Action} can be built without a method.
+    #
+    # The default is to allow actions that use only a view template, but you
+    # might want to turn this on, for example if you have partials in your view
+    # directories.
+    #
+    # @example turning needs_method? on
+    #
+    #   class Foo
+    #     Innate.node('/')
+    #   end
+    #
+    #   Foo.needs_method? # => true
+    #   Foo.trait :needs_method => false
+    #   Foo.needs_method? # => false
+    #
+    # @return [true, false] (false)
+    #
+    # @api external
+    # @see {Node#fill_action}
+    # @author manveru
+    def needs_method?
+      ancestral_trait[:needs_method]
+    end
+
+    # This will return true if the only provides set are by {Node::included}.
+    #
+    # The reasoning behind this is to determine whether the user has touched
+    # the provides at all, in which case we will not override the provides in
+    # subclasses.
+    #
+    # @return [true, false] (false)
+    #
+    # @api internal
+    # @see {Node::included}
+    # @author manveru
+    def provide_set?
+      ancestral_trait[:provide_set]
+    end
   end
 
   module SingletonMethods
@@ -629,10 +954,14 @@ module Innate
     # +location+.
     #
     # @param [#to_s]    location where the node is mapped to
-    # @param [Node nil] node     the class that will be a node, will try to look it
-    #                            up if not given
-    # @return [Class] the node argument or detected class will be returned
-    # @see Innate::node_from_backtrace
+    # @param [Node, nil] node     the class that will be a node, will try to
+    #                            look it up if not given
+    #
+    # @return [Class, Module]    the node argument or detected class will be
+    #                            returned
+    #
+    # @api external
+    # @see SingletonMethods::node_from_backtrace
     # @author manveru
     def node(location, node = nil)
       node ||= node_from_backtrace(caller)
@@ -649,13 +978,17 @@ module Innate
     # If there are any problems with this (filenames containing ':' or
     # metaprogramming) just pass the node parameter explicitly to Innate::node
     #
-    # @param [Array #[]] backtrace
-    # @see Innate::node
+    # @param [Array<String>, #[]] backtrace
+    #
+    # @return [Class, Module]
+    #
+    # @api internal
+    # @see SingletonMethods::node
     # @author manveru
     def node_from_backtrace(backtrace)
-      file, line = backtrace[0].split(':', 2)
-      line = line.to_i
-      File.readlines(file)[0..line].reverse.find{|line| line =~ /^\s*class\s+(\S+)/ }
+      filename, lineno = backtrace[0].split(':', 2)
+      regexp = /^\s*class\s+(\S+)/
+      File.readlines(filename)[0..lineno.to_i].reverse.find{|l| l =~ regexp }
       const_get($1)
     end
   end

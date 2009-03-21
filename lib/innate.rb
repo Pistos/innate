@@ -21,6 +21,7 @@ module Innate
   require 'set'
   require 'pathname'
   require 'digest/sha1'
+  require 'digest/sha2'
   require 'ipaddr'
   require 'socket'
   require 'logger'
@@ -29,19 +30,25 @@ module Innate
   # 3rd party
   require 'rack'
 
-  # innate core patches
+  # innates ruby core patches
   require 'innate/core_compatibility/string'
   require 'innate/core_compatibility/basic_object'
 
   # innate core
   require 'innate/version'
   require 'innate/traited'
+  require 'innate/trinity'
+  require 'innate/middleware_compiler'
+  require 'innate/options/dsl'
+  require 'innate/options/stub'
+  require 'innate/dynamap'
+
+  # innate full
   require 'innate/cache'
   require 'innate/node'
   require 'innate/options'
   require 'innate/log'
   require 'innate/state'
-  require 'innate/trinity'
   require 'innate/current'
   require 'innate/mock'
   require 'innate/adapter'
@@ -50,18 +57,15 @@ module Innate
   require 'innate/view'
   require 'innate/session'
   require 'innate/session/flash'
-  require 'innate/dynamap'
   require 'innate/route'
-
-  # innate lib/rack
-  require 'rack/reloader'
-  require 'rack/middleware_compiler'
 
   extend Trinity
 
   # Contains all the module functions for Innate, we keep them in a module so
   # Ramaze can simply use them as well.
   module SingletonMethods
+    PROXY_OPTIONS = { :port => 'adapter.port', :host => 'adapter.host',
+                      :adapter => 'adapter.handler' }
     # The method that starts the whole business.
     #
     # Call Innate.start after you defined your application.
@@ -73,7 +77,7 @@ module Innate
     # We do return if options.started is true, which indicates that all you
     # wanted to do is setup the environment and update options.
     #
-    # @usage
+    # @example usage
     #
     #   # passing options
     #   Innate.start :adapter => :mongrel, :mode => :live
@@ -93,7 +97,7 @@ module Innate
     #   Port for the server
     # @option param :started [boolean] (false)
     #   Indicate that calls Innate::start will be ignored
-    # @option param :adapter [Symbol]  (:webrick)
+    # @option param :handler [Symbol]  (:webrick)
     #   Web server to run on
     # @option param :setup   [Array]   ([Innate::Cache, Innate::Node])
     #   Will send ::setup to each element during Innate::start
@@ -105,25 +109,34 @@ module Innate
     #   Keep state in Thread or Fiber, fall back to Thread if Fiber not available
     # @option param :mode    [Symbol]  (:dev)
     #   Indicates which default middleware to use, (:dev|:live)
-    def start(param = {}, &block)
-      app = param[:app] || :pristine
-      options.sub(app).o("Application Root", :root, go_figure_root(param, caller))
-      param.reject!{|k, v| [:app, :root, :file].include?(k) }
-      options.merge!(param)
+    def start(given_options = {}, &block)
+      root = given_options.delete(:root)
+      file = given_options.delete(:file)
+
+      if found_root = go_figure_root(:root => root, :file => file)
+        $0 = found_root
+        Innate.options.roots = [found_root]
+      end
+
+      PROXY_OPTIONS.each{|k,v| given_options[v] = given_options.delete(k) }
+      given_options.delete_if{|k,v| v.nil? }
+
+      options.merge!(given_options)
 
       setup_dependencies
-      middleware!(options[:mode], &block) if block_given?
+      middleware!(options.mode, &block) if block_given?
 
-      return if options[:started]
-      options[:started] = true
+      return if options.started
+      options.started = true
 
-      trap(options[:trap]){ stop(10) } if options[:trap]
+      signal = options.trap
+      trap(signal){ stop(10) } if signal
 
-      start!(options)
+      start!
     end
 
-    def start!(options = Innate.options)
-      Adapter.start(middleware(options[:mode]), options)
+    def start!(mode = options[:mode])
+      Adapter.start(middleware(mode))
     end
 
     def stop(wait = 3)
@@ -154,16 +167,16 @@ module Innate
       middleware(mode).call(env)
     end
 
-    def middleware(mode, &block)
-      Rack::MiddlewareCompiler.build(mode, &block)
+    def middleware(mode = options[:mode], &block)
+      options[:middleware_compiler].build(mode, &block)
     end
 
-    def middleware!(mode, &block)
-      Rack::MiddlewareCompiler.build!(mode, &block)
+    def middleware!(mode = options[:mode], &block)
+      options[:middleware_compiler].build!(mode, &block)
     end
 
     def middleware_recompile(mode = options[:mode])
-      Rack::MiddlewareCompiler::COMPILED[mode].compile!
+      options[:middleware_compiler]::COMPILED[mode].compile!
     end
 
     # Innate can be started by:
@@ -176,7 +189,7 @@ module Innate
     #
     # TODO: better documentation and nice defaults, don't want to rely on a
     #       filename, bad mojo.
-    def go_figure_root(options, backtrace)
+    def go_figure_root(options, backtrace = caller)
       if o_file = options[:file]
         return File.dirname(o_file)
       elsif root = options[:root]

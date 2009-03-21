@@ -3,9 +3,12 @@
 
 require 'spec/helper'
 
-Innate.options.app.root = File.dirname(__FILE__)
+class SpecActionLayout
+  include Innate::Node
+  map_layouts '/'
+end
 
-class SpecActionLayoutMethod
+class SpecActionLayoutMethod < SpecActionLayout
   Innate.node('/from_method', self)
   layout('method_layout')
 
@@ -22,7 +25,7 @@ class SpecActionLayoutMethod
   end
 end
 
-class SpecActionLayoutFile
+class SpecActionLayoutFile < SpecActionLayout
   Innate.node('/from_file', self)
   layout('file_layout')
 
@@ -31,7 +34,7 @@ class SpecActionLayoutFile
   end
 end
 
-class SpecActionLayoutSpecific
+class SpecActionLayoutSpecific < SpecActionLayout
   Innate.node('/specific', self)
   layout('file_layout'){|name, wish| name == 'index' }
 
@@ -44,7 +47,7 @@ class SpecActionLayoutSpecific
   end
 end
 
-class SpecActionLayoutDeny
+class SpecActionLayoutDeny < SpecActionLayout
   Innate.node('/deny', self)
   layout('file_layout'){|name, wish| name != 'without' }
 
@@ -57,7 +60,7 @@ class SpecActionLayoutDeny
   end
 end
 
-class SpecActionLayoutMulti
+class SpecActionLayoutMulti < SpecActionLayout
   Innate.node('/multi', self)
   layout('file_layout'){|name, wish| name =~ /index|second/ }
 

@@ -3,17 +3,18 @@ module Innate
     :wish, :options, :variables, :value, :view_value, :engine ]
 
   class Action < Struct.new(*ACTION_MEMBERS)
-    # Holds the default values for merging in {Action::create}
-    DEFAULT = {:options => {}, :variables => {}, :params => []}
-
     # Create a new Action instance.
+    # Note that the default cannot be a constant as assigning the value objects
+    # to the struct would modify them and might lead to bugs due to persisting
+    # action contents.
     #
     # @param [Hash, #to_hash] hash used to seed new Action instance
     # @return [Action] action with the given defaults from hash
     # @api stable
     # @author manveru
     def self.create(hash = {})
-      new(*DEFAULT.merge(hash.to_hash).values_at(*ACTION_MEMBERS))
+      default = {:options => {}, :variables => {}, :params => []}
+      new(*default.merge(hash.to_hash).values_at(*ACTION_MEMBERS))
     end
 
     def merge!(hash)
@@ -106,19 +107,6 @@ module Innate
         options[:content_type] ||= content_type if content_type
         body
       end
-    end
-
-    # @param [String, #to_str] string to be rendered
-    # @return [String] The rendered result of the templating engine
-    # @raise [RuntimeError] if no suitable templating engine was found
-    # @see Action#as_html
-    # @author manveru
-    def fulfill_wish(string)
-      way = File.basename(view).gsub!(/.*?#{wish}\./, '') if view
-      way ||= node.provide[wish] || node.provide['html']
-
-      return View.render(way, self, string || view) if way
-      raise("No templating engine was found for %p" % way)
     end
 
     def wrap_in_layout

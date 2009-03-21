@@ -1,4 +1,4 @@
-module Rack
+module Innate
   class MiddlewareCompiler
     COMPILED = {}
 
@@ -36,11 +36,15 @@ module Rack
     end
 
     # Default application for Innate
-    def innate
-      public_root = ::File.join(Innate.options.app.root.to_s,
-                                Innate.options.app.public.to_s)
-      cascade(Rack::File.new(public_root),
-              Innate::Current.new(Innate::Route.new, Innate::Rewrite.new))
+    def innate(app = Innate::DynaMap, options = Innate.options)
+      roots, publics = options[:roots], options[:publics]
+
+      joined = roots.map{|root| publics.map{|public| ::File.join(root, public)}}
+
+      apps = joined.flatten.map{|pr| Rack::File.new(pr) }
+      apps << Current.new(Route.new(app), Rewrite.new(app))
+
+      cascade(*apps)
     end
 
     def static(path)
