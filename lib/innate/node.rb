@@ -364,14 +364,15 @@ module Innate
     # @author manveru
     def resolve(path)
       name, wish, engine = find_provide(path)
-      action = Action.create(:node => self, :wish => wish, :engine => engine)
+      node = (respond_to?(:ancestors) && respond_to?(:new)) ? self : self.class
+      action = Action.create(:node => node, :wish => wish, :engine => engine)
 
-      if content_type = ancestral_trait["#{wish}_content_type"]
+      if content_type = node.ancestral_trait["#{wish}_content_type"]
         action.options = {:content_type => content_type}
       end
 
-      update_method_arities
-      fill_action(action, name)
+      node.update_method_arities
+      node.fill_action(action, name)
     end
 
     # Resolve possible provides for the given +path+ from {provides}.
@@ -421,6 +422,8 @@ module Innate
         next unless method if needs_method
         next unless method if params.any?
         next unless (view = find_view(name, wish)) or method
+
+        params.map!{|param| Rack::Utils.unescape(param) }
 
         action.merge!(:method => method, :view => view, :params => params,
                       :layout => find_layout(name, wish))
@@ -726,7 +729,7 @@ module Innate
       atoms.size.downto(0) do |len|
         action = atoms[0...len].join('__')
         params = atoms[len..-1]
-        action = 'index' if action.empty?
+        action = 'index' if action.empty? and params != ['index']
 
         return result if result = yield(action, params)
       end

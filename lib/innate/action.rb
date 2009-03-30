@@ -100,10 +100,12 @@ module Innate
       self.variables[:content] ||= nil
 
       instance.wrap_action_call(self) do
+        copy_variables # this might another position after all
         self.value = instance.__send__(method, *params) if method
         self.view_value = File.read(view) if view
 
-        body, content_type = wrap_in_layout{ engine.call(self, view_value || value) }
+        body, content_type = wrap_in_layout{
+          engine.call(self, view_value || value || '') }
         options[:content_type] ||= content_type if content_type
         body
       end
@@ -122,13 +124,16 @@ module Innate
     end
 
     def layout_view_or_method(name, arg)
-      return arg, nil if name == :layout || name == :view
-      return nil, arg
+      [:layout, :view].include?(name) ? [arg, nil] : [nil, arg]
     end
 
     # Try to figure out a sane name for current action.
     def name
       File.basename((method || view).to_s).split('.').first
+    end
+
+    def valid?
+      method || view
     end
   end
 end
