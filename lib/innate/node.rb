@@ -28,7 +28,8 @@ module Innate
   module Node
     include Traited
 
-    DEFAULT_HELPERS = %w[aspect cgi flash link partial redirect send_file]
+    attr_reader :method_arities, :layout_templates, :view_templates
+
     NODE_LIST = Set.new
 
     # These traits are inherited into ancestors, changing a trait in an
@@ -56,14 +57,12 @@ module Innate
     # Upon inclusion we make ourselves comfortable.
     def self.included(into)
       into.__send__(:include, Helper)
-      into.helper(*DEFAULT_HELPERS)
-
       into.extend(Trinity, self)
 
       NODE_LIST << into
 
       return if into.provide_set?
-      into.provide(:html, :ERB)
+      into.provide(:html, :engine => :Etanni)
       into.trait(:provide_set => false)
     end
 
@@ -372,6 +371,7 @@ module Innate
       end
 
       node.update_method_arities
+      node.update_template_mappings
       node.fill_action(action, name)
     end
 
@@ -537,12 +537,10 @@ module Innate
       @method_arities
     end
 
-    attr_reader :method_arities
-
     # Try to find the best template for the given basename and wish and respect
     # aliased views.
     #
-    # @param [#to_s] file
+    # @param [#to_s] action_name
     # @param [#to_s] wish
     #
     # @return [String, nil] depending whether a template could be found
@@ -550,11 +548,11 @@ module Innate
     # @api external
     # @see Node#to_template Node#find_aliased_view
     # @author manveru
-    def find_view(file, wish)
-      aliased = find_aliased_view(file, wish)
+    def find_view(action_name, wish)
+      aliased = find_aliased_view(action_name, wish)
       return aliased if aliased
 
-      to_view(file, wish)
+      to_view(action_name, wish)
     end
 
     # Try to find the best template for the given basename and wish.
@@ -562,7 +560,7 @@ module Innate
     # This method is mostly here for symetry with {to_layout} and to allow you
     # overriding the template lookup easily.
     #
-    # @param [#to_s] file
+    # @param [#to_s] action_name
     # @param [#to_s] wish
     #
     # @return [String, nil] depending whether a template could be found
@@ -571,9 +569,9 @@ module Innate
     # @see {Node#find_view} {Node#to_template} {Node#root_mappings}
     #      {Node#view_mappings} {Node#to_template}
     # @author manveru
-    def to_view(file, wish)
-      path = root_mappings.concat(view_mappings) << file
-      to_template(path, wish)
+    def to_view(action_name, wish)
+      return unless files = view_templates[wish.to_s]
+      files[action_name.to_s]
     end
 
     # Aliasing one view from another.
@@ -611,9 +609,9 @@ module Innate
       trait[:alias_view][to.to_s] = node ? [from.to_s, node] : from.to_s
     end
 
-    # Resolve one level of aliasing for the given +file+ and +wish+.
+    # Resolve one level of aliasing for the given +action_name+ and +wish+.
     #
-    # @param [String] file
+    # @param [String] action_name
     # @param [String] wish
     #
     # @return [nil, String] the absolute path to the aliased template or nil
@@ -621,18 +619,21 @@ module Innate
     # @api internal
     # @see Node::alias_view Node::find_view
     # @author manveru
-    def find_aliased_view(file, wish)
-      aliased_file, aliased_node = ancestral_trait[:alias_view][file]
+    def find_aliased_view(action_name, wish)
+      aliased_name, aliased_node = ancestral_trait[:alias_view][action_name]
+      return unless aliased_name
+
       aliased_node ||= self
-      aliased_node.find_view(aliased_file, wish) if aliased_file
+      aliased_node.update_view_mappings
+      aliased_node.find_view(aliased_name, wish)
     end
 
-    # Find the best matching file for the layout, if any.
+    # Find the best matching action_name for the layout, if any.
     #
     # This is mostly an abstract method that you might find handy if you want
     # to do vastly different layout lookup.
     #
-    # @param [String] file
+    # @param [String] action_name
     # @param [String] wish
     #
     # @return [nil, String] the absolute path to the template or nil
@@ -640,9 +641,9 @@ module Innate
     # @api external
     # @see {Node#to_template} {Node#root_mappings} {Node#layout_mappings}
     # @author manveru
-    def to_layout(file, wish)
-      path = root_mappings.concat(layout_mappings) << file
-      to_template(path, wish)
+    def to_layout(action_name, wish)
+      return unless files = layout_templates[wish.to_s]
+      files[action_name.to_s]
     end
 
     # Define a layout to use on this Node.
@@ -727,11 +728,11 @@ module Innate
       result = nil
 
       atoms.size.downto(0) do |len|
-        action = atoms[0...len].join('__')
+        action_name = atoms[0...len].join('__')
         params = atoms[len..-1]
-        action = 'index' if action.empty? and params != ['index']
+        action_name = 'index' if action_name.empty? and params != ['index']
 
-        return result if result = yield(action, params)
+        return result if result = yield(action_name, params)
       end
 
       return nil
@@ -781,31 +782,59 @@ module Innate
     #      Node#path_glob Node#ext_glob
     # @author manveru
     def to_template(path, wish)
-      return unless exts = ext_glob(wish)
-      glob = "#{path_glob(*path)}.#{exts}"
-      found = Dir[glob].uniq
-
-      count = found.size
-      Log.warn("%d views found for %p" % [count, glob]) if count > 1
-
-      found.first
+      to_view(path, wish) || to_layout(path, wish)
     end
 
-    # Produce a glob that can be processed by Dir::[] matching the possible
-    # paths to the given +elements+.
-    #
-    # The +elements+ are an Array that may be nested one level, take care to
-    # splat if you try to pass an existing Array.
-    #
-    # @return [String] glob matching possible paths to the given +elements+
-    #
-    # @api internal
-    # @see Node#to_template
-    # @author manveru
-    def path_glob(*elements)
-      File.join(elements.map{|element|
-        "{%s}" % [*element].map{|e| e.to_s.gsub('__', '/') }.join(',')
-      }).gsub(/\/\{\/?\}\//, '/')
+    def update_template_mappings
+      update_view_mappings
+      update_layout_mappings
+    end
+
+    def update_view_mappings
+      paths = possible_paths_for(view_mappings)
+      @view_templates = update_mapping_shared(paths)
+    end
+
+    def update_layout_mappings
+      paths = possible_paths_for(layout_mappings)
+      @layout_templates = update_mapping_shared(paths)
+    end
+
+    def update_mapping_shared(paths)
+      mapping = {}
+
+      provides.each do |wish_key, engine|
+        wish = wish_key[/(.*)_handler/, 1]
+        ext_glob = ext_glob(wish)
+
+        paths.reverse_each do |path|
+          ::Dir.glob(::File.join(path, "/**/*.#{ext_glob}")) do |file|
+            case file.sub(path, '').gsub('/', '__')
+            when /^(.*)\.(.*)\.(.*)$/
+              action_name, wish_ext, engine_ext = $1, $2, $3
+            when /^(.*)\.(.*)$/
+              action_name, wish_ext, engine_ext = $1, 'html', $2
+            when /.*/
+              p $1
+            end
+
+            mapping[wish_ext] ||= {}
+            mapping[wish_ext][action_name] = file
+          end
+        end
+      end
+
+      return mapping
+    end
+
+    def possible_paths_for(mappings)
+      root_mappings.map{|root_mapping|
+        mappings.first.map{|outer_mapping|
+          mappings.last.map{|inner_mapping|
+            File.join(root_mapping, outer_mapping, inner_mapping, '/')
+          }
+        }
+      }.flatten
     end
 
     # Produce a glob that can be processed by Dir::[] matching the extensions
@@ -842,7 +871,7 @@ module Innate
     # @api external
     # @author manveru
     def root_mappings
-      [*options.roots].dup
+      [*options.roots].flatten
     end
 
     # Set the paths for lookup below the Innate.options.views paths.
@@ -873,7 +902,7 @@ module Innate
       paths = [*ancestral_trait[:views]]
       paths = [mapping] if paths.empty?
 
-      [*options.views] + paths
+      [[*options.views].flatten, [*paths].flatten]
     end
 
     # Set the paths for lookup below the Innate.options.layouts paths.
@@ -904,7 +933,7 @@ module Innate
       paths = [*ancestral_trait[:layouts]]
       paths = [mapping] if paths.empty?
 
-      [*options.layouts] + paths
+      [[*options.layouts].flatten, [*paths].flatten]
     end
 
     def options

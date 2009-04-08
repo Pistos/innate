@@ -71,7 +71,7 @@ module Innate
     # Both +value+ and the elements of +keys+ will be turned into String by #to_s.
     def [](value, *keys)
       return super(value) if keys.empty?
-      [value, *keys].map{|k| super(k) }
+      [value, *keys].map{|key| super(key) }
     end
 
     # the full request URI provided by Rack::Request
@@ -94,8 +94,8 @@ module Innate
     #   # => {'name' => 'jason', 'job' => 'lumberjack'}
 
     def subset(*keys)
-      keys = keys.map{|k| k.to_s }
-      params.reject{|k,v| not keys.include?(k) }
+      keys = keys.map{|key| key.to_s }
+      params.reject{|key, value| not keys.include?(key) }
     end
 
     # Try to figure out the domain we are running on, this might work for some
@@ -136,26 +136,6 @@ module Innate
       LOCAL.find{|range| range.include?(addr) }
     rescue ArgumentError => ex
       raise ArgumentError, ex unless ex.message == 'invalid address'
-    end
-
-    REQUEST_STRING_FORMAT = "#<%s params=%p cookies=%p env=%p>"
-
-    def to_s
-      REQUEST_STRING_FORMAT % [self.class, params, cookies, http_variables]
-    end
-    alias inspect to_s
-
-    # Pretty prints current action with parameters, cookies and enviroment
-    # variables.
-    def pretty_print(pp)
-      pp.object_group(self){
-        group = { 'params' => params, 'cookies' => cookies, 'env' => http_vars }
-        group.each do |name, hash|
-          pp.breakable
-          pp.text " @#{name}="
-          pp.nest(name.size + 3){ pp.pp_hash(hash) }
-        end
-      }
     end
   end
 end
