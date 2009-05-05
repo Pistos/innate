@@ -2,14 +2,19 @@ module Innate
   module View
     module Etanni
       def self.call(action, string)
-        template = Innate::Etanni.new(string.to_s)
-        html = template.result(action.binding, (action.view || action.method))
+        etanni = View.compile(string){|s| Innate::Etanni.new(s) }
+        html = etanni.result(action.binding, (action.view || action.method))
         return html, 'text/html'
       end
     end
   end
 
   class Etanni
+    SEPARATOR = "E69t116A65n110N78i105S83e101P80a97R82a97T84o111R82"
+    START = "\n<<#{SEPARATOR}.chomp\n"
+    STOP = "\n#{SEPARATOR}\n"
+    ADD = "_out_ << "
+
     def initialize(template)
       @template = template
       compile
@@ -17,16 +22,8 @@ module Innate
 
     def compile
       temp = @template.dup
-      start_heredoc = "T" << Digest::SHA1.hexdigest(temp)
-      start_heredoc, end_heredoc = "\n<<#{start_heredoc}.chomp\n", "\n#{start_heredoc}\n"
-      bufadd = "_out_ << "
-
-      temp.gsub!(/<\?r\s+(.*?)\s+\?>/m,
-            "#{end_heredoc} \\1; #{bufadd} #{start_heredoc}")
-
-      @compiled = "_out_ = ''
-      #{bufadd} #{start_heredoc} #{temp} #{end_heredoc}
-      _out_"
+      temp.gsub!(/<\?r\s+(.*?)\s+\?>/m, "#{STOP} \\1; #{ADD} #{START}")
+      @compiled = "_out_ = #{START} #{temp} #{STOP} _out_"
     end
 
     def result(binding, filename = '<Etanni>')

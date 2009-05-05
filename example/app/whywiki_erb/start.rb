@@ -7,7 +7,7 @@ DB = YAML::Store.new('wiki.yaml') unless defined?(DB)
 class Wiki
   Innate.node '/'
   layout 'wiki'
-  engine :ERB
+  provide :html, :engine => :ERB
 
   def index(page = 'Home')
     @page = page
@@ -35,8 +35,8 @@ class Wiki
   private
 
   def sync
-    Innate::STATE.sync{ DB.transaction{ yield }}
+    Innate.sync{ DB.transaction{ yield }}
   end
 end
 
-Innate.start :adapter => :mongrel
+Innate.start

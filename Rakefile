@@ -4,10 +4,9 @@ require 'rake/gempackagetask'
 require 'time'
 require 'date'
 
-specs =  Dir['spec/{innate,example}/**/*.rb']
-specs -= Dir['spec/innate/cache/common.rb']
-PROJECT_SPECS = specs
+PROJECT_SPECS = FileList['spec/{innate,example}/**/*.rb'].exclude('common.rb')
 PROJECT_MODULE = 'Innate'
+PROJECT_README = 'README.md'
 
 GEMSPEC = Gem::Specification.new{|s|
   s.name         = 'innate'
@@ -21,10 +20,12 @@ GEMSPEC = Gem::Specification.new{|s|
   s.files        = `git ls-files`.split("\n").sort
   s.has_rdoc     = true
   s.require_path = 'lib'
+  s.rubyforge_project = "innate"
 
-#   s.add_runtime_dependency('rack', '>= 0.9.1') # lies!
-#   s.add_development_dependency('bacon', '>= 1.0')
-#   s.add_development_dependency('json', '~> 1.1.3')
+  # s.add_runtime_dependency('rack', '>= 0.9.1') # lies!
+  # s.add_development_dependency('bacon', '>= 1.0')
+  # s.add_development_dependency('json', '~> 1.1.3')
+  # s.add_development_dependency('rack-test', '>= 0.1.0')
 }
 
 Dir['tasks/*.rake'].each{|f| import(f) }

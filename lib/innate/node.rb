@@ -244,7 +244,7 @@ module Innate
     # with feedback in your logs.
     #
     # A lot of functionality in here relies on the fact that call is executed
-    # within Innate::STATE.wrap which populates the variables used by Trinity.
+    # within Current#call which populates the variables used by Trinity.
     # So if you use the Node directly as a middleware make sure that you #use
     # Innate::Current as a middleware before it.
     #
@@ -364,7 +364,7 @@ module Innate
     def resolve(path)
       name, wish, engine = find_provide(path)
       node = (respond_to?(:ancestors) && respond_to?(:new)) ? self : self.class
-      action = Action.create(:node => node, :wish => wish, :engine => engine)
+      action = Action.create(:node => node, :wish => wish, :engine => engine, :path => path)
 
       if content_type = node.ancestral_trait["#{wish}_content_type"]
         action.options = {:content_type => content_type}
@@ -742,8 +742,6 @@ module Innate
     #
     # Since Innate supports multiple paths to templates the +path+ has to be an
     # Array that may be nested one level.
-    # The +path+ is then translated by {Node#path_glob} and the +wish+ by
-    # {Node#ext_glob}.
     #
     # @example Usage to find available templates
     #
@@ -779,7 +777,6 @@ module Innate
     #
     # @api external
     # @see Node#find_view Node#to_layout Node#find_aliased_view
-    #      Node#path_glob Node#ext_glob
     # @author manveru
     def to_template(path, wish)
       to_view(path, wish) || to_layout(path, wish)
@@ -802,24 +799,27 @@ module Innate
 
     def update_mapping_shared(paths)
       mapping = {}
+      paths.reject!{|path| !File.directory?(path) }
 
       provides.each do |wish_key, engine|
         wish = wish_key[/(.*)_handler/, 1]
-        ext_glob = ext_glob(wish)
+        exts = possible_exts_for(wish)
 
         paths.reverse_each do |path|
-          ::Dir.glob(::File.join(path, "/**/*.#{ext_glob}")) do |file|
-            case file.sub(path, '').gsub('/', '__')
-            when /^(.*)\.(.*)\.(.*)$/
-              action_name, wish_ext, engine_ext = $1, $2, $3
-            when /^(.*)\.(.*)$/
-              action_name, wish_ext, engine_ext = $1, 'html', $2
-            when /.*/
-              p $1
-            end
+          Find.find(path) do |file|
+            exts.each do |ext|
+              next unless file =~ ext
 
-            mapping[wish_ext] ||= {}
-            mapping[wish_ext][action_name] = file
+              case file.sub(path, '').gsub('/', '__')
+              when /^(.*)\.(.*)\.(.*)$/
+                action_name, wish_ext, engine_ext = $1, $2, $3
+              when /^(.*)\.(.*)$/
+                action_name, wish_ext, engine_ext = $1, wish, $2
+              end
+
+              mapping[wish_ext] ||= {}
+              mapping[wish_ext][action_name] = file
+            end
           end
         end
       end
@@ -827,32 +827,37 @@ module Innate
       return mapping
     end
 
+    # Answer with an array of possible paths in order of significance for
+    # template lookup of the given +mappings+.
+    #
+    # @param [#map] An array two Arrays of inner and outer directories.
+    #
+    # @return [Array]
+    # @see update_view_mappings update_layout_mappings update_template_mappings
+    # @author manveru
     def possible_paths_for(mappings)
-      root_mappings.map{|root_mapping|
-        mappings.first.map{|outer_mapping|
-          mappings.last.map{|inner_mapping|
-            File.join(root_mapping, outer_mapping, inner_mapping, '/')
-          }
-        }
-      }.flatten
+      root_mappings.map{|root|
+        mappings.first.map{|inner|
+          mappings.last.map{|outer|
+            ::File.join(root, inner, outer, '/') }}}.flatten
     end
 
-    # Produce a glob that can be processed by Dir::[] matching the extensions
-    # associated with the given +wish+.
+    # Answer with an array of possible extensions in order of significance for
+    # the given +wish+.
     #
     # @param [#to_s] wish the extension (no leading '.')
     #
-    # @return [String] glob matching the valid exts for the given +wish+
+    # @return [Array] list of exts valid for this +wish+
     #
     # @api internal
     # @see Node#to_template View::exts_of Node#provides
     # @author manveru
-    def ext_glob(wish)
+    def possible_exts_for(wish)
       pr = provides
       return unless engine = pr["#{wish}_handler"]
-      engine_exts = View.exts_of(engine).join(',')
-      represented = [*wish].map{|k| "#{k}." }.join(',')
-      "{%s,}{%s}" % [represented, engine_exts]
+      View.exts_of(engine).map{|e_ext|
+        [[*wish].map{|w_ext| /#{w_ext}\.#{e_ext}$/ }, /#{e_ext}$/]
+      }.flatten
     end
 
     # For compatibility with new Kernel#binding behaviour in 1.9
@@ -931,7 +936,7 @@ module Innate
     # @author manveru
     def layout_mappings
       paths = [*ancestral_trait[:layouts]]
-      paths = [mapping] if paths.empty?
+      paths = ['/'] if paths.empty?
 
       [[*options.layouts].flatten, [*paths].flatten]
     end

@@ -65,19 +65,6 @@ class SpecHelperRenderView
   end
 end
 
-class SpecHelperRenderTemplate
-  Innate.node '/render_template'
-
-  def relative
-    render_template('spec/innate/helper/view/num.xhtml', :n => 42)
-  end
-
-  def absolute
-    path = File.join(File.dirname(__FILE__), 'view/num.xhtml')
-    render_template(path, :n => 42)
-  end
-end
-
 class SpecHelperRenderMisc
   Innate.node '/misc'
   map_views '/'
@@ -87,9 +74,29 @@ class SpecHelperRenderMisc
   end
 end
 
+class SpecHelperRenderFile
+  Innate.node '/render_file'
+
+  layout :layout
+
+  def layout
+    '{ #{@content} }'
+  end
+
+  FILE = File.expand_path('../view/aspect_hello.xhtml', __FILE__)
+
+  def absolute
+    render_file(FILE)
+  end
+
+  def absolute_with(foo, bar)
+    render_file(FILE, :foo => foo, :bar => bar)
+  end
+end
+
 describe Innate::Helper::Render do
   describe '#render_full' do
-    behaves_like :mock, :session
+    behaves_like :mock
 
     it 'renders a full action' do
       get('/render_full/standard').body.should == 'foo: []'
@@ -107,10 +114,8 @@ describe Innate::Helper::Render do
     # value in the session that we can get afterwards.
 
     it 'renders full action inside a session' do
-      session do |mock|
-        mock.get('/render_full/set_session/user/manveru')
-        mock.get('/render_full/with_session').body.should == '"manveru"'
-      end
+      get('/render_full/set_session/user/manveru')
+      get('/render_full/with_session').body.should == '"manveru"'
     end
   end
 
@@ -134,15 +139,6 @@ describe Innate::Helper::Render do
     end
   end
 
-  describe '#render_template' do
-    behaves_like :mock
-
-    it 'renders action with the given template file' do
-      get('/render_template/relative').body.should == '42'
-      get('/render_template/absolute').body.should == '42'
-    end
-  end
-
   describe 'misc functionality' do
     behaves_like :mock
 
@@ -152,6 +148,18 @@ describe Innate::Helper::Render do
 
     it 'can recursively render_partial' do
       get('/misc/recursive').body.scan(/\S/).join.should == '{1{2{3{44}3}2}1}'
+    end
+  end
+
+  describe '#render_file' do
+    behaves_like :mock
+
+    it 'renders file from absolute path' do
+      get('/render_file/absolute').body.should == '{ ! }'
+    end
+
+    it 'renders file from absolute path with variables' do
+      get('/render_file/absolute_with/one/two').body.should == '{ one two! }'
     end
   end
 end

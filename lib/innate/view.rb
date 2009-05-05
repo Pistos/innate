@@ -4,9 +4,24 @@ module Innate
   # lazy requiring of needed engines.
 
   module View
+    include Optioned
+
     ENGINE, TEMP = {}, {}
 
+    options.option "Cache compiled templates", :cache, true
+
+    # In order to be able to render actions without running
+    # Innate::setup_dependencies we have to add the cache here already.
+    Cache.add(:view)
+
     module_function
+
+    def compile(string)
+      return yield(string.to_s) unless View.options.cache
+      string = string.to_s
+      checksum = Digest::MD5.hexdigest(string)
+      Cache.view[checksum] ||= yield(string)
+    end
 
     def exts_of(engine)
       name = engine.to_s
@@ -29,10 +44,10 @@ module Innate
     # on the first request (before TEMP is set).
     # No mutex is used in Fiber environment, see Innate::State and subclasses.
     def obtain(klass, root = Object)
-      STATE.sync do
+      Thread.exclusive{
         klass.to_s.scan(/\w+/){|part| root = root.const_get(part) }
-        root
-      end
+        return root
+      }
     end
 
     # Register given templating engine wrapper and extensions for later usage.
