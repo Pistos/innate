@@ -244,7 +244,7 @@ module Innate
     # with feedback in your logs.
     #
     # A lot of functionality in here relies on the fact that call is executed
-    # within Innate::STATE.wrap which populates the variables used by Trinity.
+    # within Current#call which populates the variables used by Trinity.
     # So if you use the Node directly as a middleware make sure that you #use
     # Innate::Current as a middleware before it.
     #
@@ -261,11 +261,7 @@ module Innate
       path << '/' if path.empty?
 
       response.reset
-      response = try_resolve(path)
-
-      Current.session.flush(response)
-
-      response.finish
+      try_resolve(path).finish
     end
 
     # Let's try to find some valid action for given +path+.
@@ -798,15 +794,15 @@ module Innate
     end
 
     def update_mapping_shared(paths)
-      require 'find'
       mapping = {}
+      paths.reject!{|path| !File.directory?(path) }
 
       provides.each do |wish_key, engine|
         wish = wish_key[/(.*)_handler/, 1]
         exts = possible_exts_for(wish)
 
         paths.reverse_each do |path|
-          Find.find(*paths.reverse) do |file|
+          Find.find(path) do |file|
             exts.each do |ext|
               next unless file =~ ext
 

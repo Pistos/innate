@@ -9,12 +9,17 @@ module Innate
   # You may store anything in here that you may also store in the corresponding
   # store, usually it's best to keep it to things that are safe to Marshal.
   #
-  # The default time of expiration is *
+  # The Session instance is compatible with the specification of rack.session.
   #
+  # Since the Time class is used to create the cookie expiration timestamp, you
+  # will have to keep the ttl in a reasonable range.
+  # The maximum value that Time can store on a 32bit system is:
   #   Time.at(2147483647) # => Tue Jan 19 12:14:07 +0900 2038
   #
-  # Hopefully we all have 64bit systems by then.
-
+  # The default expiration time for cookies and the session cache was reduced
+  # to a default of 30 days.
+  # This was done to be compatible with the maximum ttl of MemCache. You may
+  # increase this value if you do not use MemCache to persist your sessions.
   class Session
     include Optioned
 
@@ -28,7 +33,14 @@ module Innate
       o "Use secure cookie",
         :secure, false
       o "Time of cookie expiration",
-        :expires, Time.at((1 << 31) - 1)
+        :expires, nil
+      o "Time to live in seconds for session cookies and cache",
+        :ttl, (60 * 60 * 24 * 30) # 30 days
+
+      trigger(:expires){|v|
+        self.ttl = v - Time.now.to_i
+        Log.warn("Innate::Session.options.expires is deprecated, use #ttl instead")
+      }
     end
 
     attr_reader :cookie_set, :request, :response, :flash
@@ -40,13 +52,17 @@ module Innate
       @flash = Flash.new(self)
     end
 
-    def []=(key, value)
+    # Rack interface
+
+    def store(key, value)
       cache_sid[key] = value
     end
+    alias []= store
 
-    def [](key)
+    def fetch(key, value = nil)
       cache_sid[key]
     end
+    alias [] fetch
 
     def delete(key)
       cache_sid.delete(key)
@@ -57,16 +73,13 @@ module Innate
       @cache_sid = nil
     end
 
-    def cache_sid
-      @cache_sid ||= cache[sid] || {}
-    end
+    # Additional interface
 
     def flush(response = @response)
       return if !@cache_sid or @cache_sid.empty?
 
       flash.rotate!
-      ttl = (Time.at(cookie_value[:expires]) - Time.now).to_i
-      cache.store(sid, cache_sid, :ttl => ttl)
+      cache.store(sid, cache_sid, :ttl => options.ttl)
       set_cookie(response)
     end
 
@@ -74,15 +87,15 @@ module Innate
       @sid ||= cookie || generate_sid
     end
 
+    private
+
+    def cache_sid
+      @cache_sid ||= cache[sid] || {}
+    end
+
     def cookie
       @request.cookies[options.key]
     end
-
-    def inspect
-      cache.inspect
-    end
-
-    private
 
     def cache
       Innate::Cache.session
@@ -96,11 +109,11 @@ module Innate
     end
 
     def cookie_value
-      { :value   => sid,
-        :domain  => options.domain,
+      { :domain  => options.domain,
+        :expires => (Time.now + options.ttl),
         :path    => options.path,
         :secure  => options.secure,
-        :expires => options.expires }
+        :value   => sid }
     end
 
     def generate_sid

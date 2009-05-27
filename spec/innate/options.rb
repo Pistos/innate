@@ -98,11 +98,19 @@ describe Options do
     lambda{ @options[:foo] = :bar }.should.raise(ArgumentError)
   end
 
+  should "raise when trying to assign to an option that doesn't exist" do
+    lambda{ @options.merge!(:foo => :bar) }.should.raise(IndexError)
+  end
+
   should 'pretty_print' do
     require 'pp'
     p = PP.new
     @options.pretty_print(p)
-    p.output.should =~ /:value=>:mom/
+    lines = p.output.split(/\n/)
+    lines.find_all{|l|
+      /:doc/ === l &&
+      /:value/ === l
+    }.size.should > 3
   end
 
   should 'trigger block when option is changed' do

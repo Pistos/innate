@@ -64,31 +64,16 @@ module Innate
       from_action
     end
 
-    COPY_VARIABLES = '
-      STATE[:action_variables].each do |iv, value|
-        instance_variable_set("@#{iv}", value)
-      end'.strip.freeze
-
-    # Copy Action#variables as instance variables into the given binding.
+    # Copy Action#variables as instance variables into the given object.
+    # Defaults to copying the variables to self.
     #
-    # This relies on Innate::STATE, so should be thread-safe and doesn't depend
-    # on Innate::Current::actions order.
-    # So we avoid nasty business with Objectspace#_id2ref which may not work on
-    # all ruby implementations and seems to cause other problems as well.
-    #
-    # @param [Binding #eval] binding
+    # @param [Object #instance_variable_set] object
     # @return [NilClass] there is no indication of failure or success
-    # @see View::ERB::render
+    # @see Action#render
     # @author manveru
-    def copy_variables(binding = self.binding)
-      return unless variables.any?
-
-      STATE.sync do
-        STATE[:action_variables] = self.variables
-
-        eval(COPY_VARIABLES, binding)
-
-        STATE[:action_variables] = nil
+    def copy_variables(object)
+      self.variables.each do |iv, value|
+        object.instance_variable_set("@#{iv}", value)
       end
     end
 
@@ -97,9 +82,9 @@ module Innate
       self.variables[:content] ||= nil
 
       instance.wrap_action_call(self) do
-        copy_variables # this might need another position after all
+        copy_variables(self.instance) # this might need another position
         self.method_value = instance.__send__(method, *params) if method
-        self.view_value = ::File.read(view) if view
+        self.view_value = View.read(view) if view
 
         body, content_type = wrap_in_layout{
           engine.call(self, view_value || method_value || '') }

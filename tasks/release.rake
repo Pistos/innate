@@ -2,13 +2,13 @@ namespace :release do
   task :all => [:release_github, :release_rubyforge]
 
   desc 'Display instructions to release on github'
-  task :github => [:reversion, :gemspec] do
+  task :github => [:reversion, :authors, :gemspec] do
     name, version = GEMSPEC.name, GEMSPEC.version
 
     puts <<INSTRUCTIONS
 First add the relevant files:
 
-git add MANIFEST CHANGELOG #{name}.gemspec lib/#{name}/version.rb
+git add AUTHORS MANIFEST CHANGELOG #{name}.gemspec lib/#{name}/version.rb
 
 Then commit them, tag the commit, and push:
 
@@ -22,14 +22,15 @@ INSTRUCTIONS
 
   # TODO: Not tested
   desc 'Display instructions to release on rubyforge'
-  task :rubyforge => [:reversion, :gemspec, :package] do
+  task :rubyforge => [:reversion, :authors, :gemspec, :package] do
     name, version = GEMSPEC.name, GEMSPEC.version
 
     puts <<INSTRUCTIONS
 To publish to rubyforge do following:
 
 rubyforge login
-rubyforge add_release #{name} '#{version}' pkg/#{name}-#{version}.gem
+rubyforge add_release #{name} #{name} '#{version}' pkg/#{name}-#{version}.gem
+
 
 After you have done these steps, see:
 
@@ -41,8 +42,9 @@ INSTRUCTIONS
   desc 'Display instructions to add archives after release:rubyforge'
   task :rubyforge_archives do
     puts "Adding archives for distro packagers is:", ""
+    name, version = GEMSPEC.name, GEMSPEC.version
 
-    Dir["pkg/#{name}-#{version}.{gz,zip}"].each do |file|
+    Dir["pkg/#{name}-#{version}.{tgz,zip}"].each do |file|
       puts "rubyforge add_file #{name} #{name} '#{version}' '#{file}'"
     end
 

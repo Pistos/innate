@@ -95,30 +95,46 @@ module Innate
         end
       end
 
-      # Use given file as a template and render it in the same scope as the
-      # current action.
+      # Use the given file as a template and render it in the same scope as
+      # the current action.
+      # The +filename+ may be an absolute path or relative to the process
+      # working directory.
       #
       # @example usage
       #
       #   path = '/home/manveru/example/app/todo/view/index.xhtml'
-      #   render_template(path)
-      #   render_template(path, :title => :foo)
+      #   render_file(path)
+      #   render_file(path, :title => :foo)
+      #
+      # Ramaze will emit a warning if you try to render an Action without a
+      # method or view template, but will still try to render it.
+      # The usual {Action#valid?} doesn't apply here, as sometimes you just
+      # cannot have a method associated with a template.
       #
       # @api external
       # @see render_custom
       # @author manveru
-      def render_template(filename, variables = {})
-        render_custom(action.path, variables) do |action|
-          action.layout = nil
-          action.method = nil
-          action.view = filename
-          yield(action) if block_given?
-        end
+      def render_file(filename, variables = {})
+        action = Action.create(:view => filename)
+        action.sync_variables(self.action)
+
+        action.node      = self.class
+        action.engine    = self.action.engine
+        action.instance  = action.node.new
+        action.variables = variables.dup
+
+        yield(action) if block_given?
+
+        valid_action = action.view || action.method
+        Log.warn("Empty action: %p" % [action]) unless valid_action
+        action.render
       end
 
+      # @api internal
+      # @author manveru
       def render_custom(action_name, variables = {})
         unless action = resolve(action_name.to_s)
-          raise(ArgumentError, "No Action %p on #{self}" % action_name)
+          raise(ArgumentError, "No Action %p on #{self}" % [action_name])
         end
 
         action.sync_variables(self.action)
@@ -127,11 +143,9 @@ module Innate
 
         yield(action) if block_given?
 
-        if action.valid?
-          action.render
-        else
-          Log.warn("Invalid action: %p" % action)
-        end
+        valid_action = action.view || action.method
+        Log.warn("Empty action: %p" % [action]) unless valid_action
+        action.render
       end
     end
   end
