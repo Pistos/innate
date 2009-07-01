@@ -22,13 +22,14 @@ GEMSPEC = Gem::Specification.new{|s|
   s.has_rdoc     = true
   s.require_path = 'lib'
   s.rubyforge_project = "innate"
+  s.required_rubygems_version = '>= 1.3.1'
 
   s.add_dependency('rack', '~> 1.0.0')
 
   # rip those out if they cause you trouble
-  # s.add_development_dependency('bacon', '>= 1.0')
-  # s.add_development_dependency('json', '~> 1.1.3')
-  # s.add_development_dependency('rack-test', '>= 0.1.0')
+  s.add_development_dependency('bacon',     '>= 1.1.0')
+  s.add_development_dependency('json',      '~> 1.1.6')
+  s.add_development_dependency('rack-test', '>= 0.3.0')
 }
 
 Dir['tasks/*.rake'].each{|f| import(f) }
