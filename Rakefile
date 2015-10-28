@@ -9,12 +9,12 @@ PROJECT_README = 'README.md'
 PROJECT_VERSION = (ENV['VERSION'] || Date.today.strftime('%Y.%m.%d')).dup
 
 DEPENDENCIES = {
-  'rack' => {:version => '~> 1.5.2'},
+  'rack' => {:version => '~> 1.6.4'},
 }
 
 DEVELOPMENT_DEPENDENCIES = {
   'bacon'     => {:version => '~> 1.2.0'},
-  'rack-test' => {:version => '~> 0.6.2', :lib => 'rack/test'}
+  'rack-test' => {:version => '~> 0.6.3', :lib => 'rack/test'}
 }
 
 GEMSPEC = Gem::Specification.new{|s|
@@ -29,8 +29,6 @@ GEMSPEC = Gem::Specification.new{|s|
   s.files        = `git ls-files`.split("\n").sort
   s.has_rdoc     = true
   s.require_path = 'lib'
-  s.rubyforge_project = "innate"
-  s.required_rubygems_version = '>= 1.3.1'
 }
 
 DEPENDENCIES.each do |name, options|
