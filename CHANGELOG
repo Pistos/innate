@@ -1,3 +1,17 @@
+[105060c | 2015-10-28 17:15:55 UTC] Michael Fellinger <m.fellinger@gmail.com>
+
+  * update dependencies and gem setup
+
+[cde6b36 | 2013-10-16 14:59:44 UTC] Patrik Rak <patrik@raxoft.cz>
+
+  * Use correct session class in Current.setup.
+
+    Current.setup should honor the passed in arguments even for session.
+
+[866c9cd | 2013-02-21 12:21:46 UTC] Michael Fellinger <m.fellinger@gmail.com>
+
+  * Version 2013.02.21
+
 [aa22191 | 2013-02-21 12:21:16 UTC] Michael Fellinger <m.fellinger@gmail.com>
 
   * update dependencies
