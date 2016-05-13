@@ -60,7 +60,7 @@ module Innate
     def self.start_webrick(app, config)
       handler = Rack::Handler.get('webrick')
       config = {
-        :BindAddress => config[:Host],
+        :Host => config[:Host],
         :Port => config[:Port],
         :Logger => Log,
       }
