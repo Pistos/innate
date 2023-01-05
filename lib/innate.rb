@@ -213,7 +213,7 @@ module Innate
       roots, publics = options[:roots], options[:publics]
 
       joined  = roots.map { |root| publics.map { |p| File.join(root, p) } }
-      joined  = joined.flatten.map { |p| Rack::File.new(p) }
+      joined  = joined.flatten.map { |p| Rack::Files.new(p) }
       current = Current.new(Route.new(DynaMap), Rewrite.new(DynaMap))
 
       return Rack::Cascade.new(joined << current, [404, 405])
