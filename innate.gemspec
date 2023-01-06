@@ -1,40 +1,32 @@
 # -*- encoding: utf-8 -*-
-# stub: innate 2023.01.05 ruby lib
+# stub: innate 2023.01.06 ruby lib
 
 Gem::Specification.new do |s|
-  s.name = "innate"
-  s.version = "2023.01.05"
+  s.name = "innate".freeze
+  s.version = "2023.01.06"
 
-  s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
-  s.require_paths = ["lib"]
-  s.authors = ["Michael 'manveru' Fellinger"]
-  s.date = "2023-01-05"
-  s.description = "Simple, straight-forward base for web-frameworks."
-  s.email = "m.fellinger@gmail.com"
-  s.files = [".gems", ".gitignore", ".load_gemset", ".rvmrc", ".travis.yml", "AUTHORS", "CHANGELOG", "COPYING", "MANIFEST", "README.md", "Rakefile", "example/app/retro_games.rb", "example/app/todo/layout/default.xhtml", "example/app/todo/spec/todo.rb", "example/app/todo/start.rb", "example/app/todo/view/index.xhtml", "example/app/whywiki_erb/layout/wiki.html.erb", "example/app/whywiki_erb/spec/wiki.rb", "example/app/whywiki_erb/start.rb", "example/app/whywiki_erb/view/edit.erb", "example/app/whywiki_erb/view/index.erb", "example/custom_middleware.rb", "example/hello.rb", "example/howto_spec.rb", "example/link.rb", "example/provides.rb", "example/session.rb", "innate.gemspec", "lib/innate.rb", "lib/innate/action.rb", "lib/innate/adapter.rb", "lib/innate/cache.rb", "lib/innate/cache/api.rb", "lib/innate/cache/drb.rb", "lib/innate/cache/file_based.rb", "lib/innate/cache/marshal.rb", "lib/innate/cache/memory.rb", "lib/innate/cache/yaml.rb", "lib/innate/current.rb", "lib/innate/default_middleware.rb", "lib/innate/dynamap.rb", "lib/innate/helper.rb", "lib/innate/helper/aspect.rb", "lib/innate/helper/cgi.rb", "lib/innate/helper/flash.rb", "lib/innate/helper/link.rb", "lib/innate/helper/redirect.rb", "lib/innate/helper/render.rb", "lib/innate/log.rb", "lib/innate/log/color_formatter.rb", "lib/innate/log/hub.rb", "lib/innate/lru_hash.rb", "lib/innate/mock.rb", "lib/innate/node.rb", "lib/innate/options.rb", "lib/innate/options/dsl.rb", "lib/innate/options/stub.rb", "lib/innate/request.rb", "lib/innate/response.rb", "lib/innate/route.rb", "lib/innate/session.rb", "lib/innate/session/flash.rb", "lib/innate/spec.rb", "lib/innate/spec/bacon.rb", "lib/innate/state.rb", "lib/innate/state/accessor.rb", "lib/innate/traited.rb", "lib/innate/trinity.rb", "lib/innate/version.rb", "lib/innate/view.rb", "lib/innate/view/erb.rb", "lib/innate/view/etanni.rb", "lib/innate/view/none.rb", "spec/example/app/retro_games.rb", "spec/example/hello.rb", "spec/example/link.rb", "spec/example/provides.rb", "spec/example/session.rb", "spec/helper.rb", "spec/innate/action/layout.rb", "spec/innate/action/layout/file_layout.xhtml", "spec/innate/cache/common.rb", "spec/innate/cache/marshal.rb", "spec/innate/cache/memory.rb", "spec/innate/cache/yaml.rb", "spec/innate/dynamap.rb", "spec/innate/etanni.rb", "spec/innate/helper.rb", "spec/innate/helper/aspect.rb", "spec/innate/helper/cgi.rb", "spec/innate/helper/flash.rb", "spec/innate/helper/link.rb", "spec/innate/helper/redirect.rb", "spec/innate/helper/render.rb", "spec/innate/helper/view/aspect_hello.xhtml", "spec/innate/helper/view/locals.xhtml", "spec/innate/helper/view/loop.xhtml", "spec/innate/helper/view/num.xhtml", "spec/innate/helper/view/partial.xhtml", "spec/innate/helper/view/recursive.xhtml", "spec/innate/mock.rb", "spec/innate/modes.rb", "spec/innate/node/mapping.rb", "spec/innate/node/node.rb", "spec/innate/node/resolve.rb", "spec/innate/node/view/another_layout/another_layout.xhtml", "spec/innate/node/view/bar.xhtml", "spec/innate/node/view/cat2/cat22.xhtml", "spec/innate/node/view/cat3/cat33.xhtml", "spec/innate/node/view/foo.html.xhtml", "spec/innate/node/view/only_view.xhtml", "spec/innate/node/view/sub/baz.xhtml", "spec/innate/node/view/sub/foo/baz.xhtml", "spec/innate/node/view/with_layout.xhtml", "spec/innate/node/wrap_action_call.rb", "spec/innate/options.rb", "spec/innate/parameter.rb", "spec/innate/provides.rb", "spec/innate/provides/list.html.xhtml", "spec/innate/provides/list.txt.xhtml", "spec/innate/request.rb", "spec/innate/response.rb", "spec/innate/route.rb", "spec/innate/session.rb", "spec/innate/traited.rb", "tasks/authors.rake", "tasks/bacon.rake", "tasks/changelog.rake", "tasks/gem.rake", "tasks/gem_setup.rake", "tasks/grancher.rake", "tasks/manifest.rake", "tasks/rcov.rake", "tasks/release.rake", "tasks/reversion.rake", "tasks/setup.rake", "tasks/ycov.rake"]
-  s.homepage = "http://github.com/manveru/innate"
-  s.rubygems_version = "2.4.5"
-  s.summary = "Powerful web-framework wrapper for Rack."
+  s.required_rubygems_version = Gem::Requirement.new(">= 0".freeze) if s.respond_to? :required_rubygems_version=
+  s.require_paths = ["lib".freeze]
+  s.authors = ["Michael 'manveru' Fellinger".freeze]
+  s.date = "2023-01-06"
+  s.description = "Simple, straight-forward base for web-frameworks.".freeze
+  s.email = "m.fellinger@gmail.com".freeze
+  s.files = [".gems".freeze, ".gitignore".freeze, ".load_gemset".freeze, ".rvmrc".freeze, ".travis.yml".freeze, "AUTHORS".freeze, "CHANGELOG".freeze, "COPYING".freeze, "MANIFEST".freeze, "README.md".freeze, "Rakefile".freeze, "example/app/retro_games.rb".freeze, "example/app/todo/layout/default.xhtml".freeze, "example/app/todo/spec/todo.rb".freeze, "example/app/todo/start.rb".freeze, "example/app/todo/view/index.xhtml".freeze, "example/app/whywiki_erb/layout/wiki.html.erb".freeze, "example/app/whywiki_erb/spec/wiki.rb".freeze, "example/app/whywiki_erb/start.rb".freeze, "example/app/whywiki_erb/view/edit.erb".freeze, "example/app/whywiki_erb/view/index.erb".freeze, "example/custom_middleware.rb".freeze, "example/hello.rb".freeze, "example/howto_spec.rb".freeze, "example/link.rb".freeze, "example/provides.rb".freeze, "example/session.rb".freeze, "innate.gemspec".freeze, "lib/innate.rb".freeze, "lib/innate/action.rb".freeze, "lib/innate/adapter.rb".freeze, "lib/innate/cache.rb".freeze, "lib/innate/cache/api.rb".freeze, "lib/innate/cache/drb.rb".freeze, "lib/innate/cache/file_based.rb".freeze, "lib/innate/cache/marshal.rb".freeze, "lib/innate/cache/memory.rb".freeze, "lib/innate/cache/yaml.rb".freeze, "lib/innate/current.rb".freeze, "lib/innate/default_middleware.rb".freeze, "lib/innate/dynamap.rb".freeze, "lib/innate/helper.rb".freeze, "lib/innate/helper/aspect.rb".freeze, "lib/innate/helper/cgi.rb".freeze, "lib/innate/helper/flash.rb".freeze, "lib/innate/helper/link.rb".freeze, "lib/innate/helper/redirect.rb".freeze, "lib/innate/helper/render.rb".freeze, "lib/innate/log.rb".freeze, "lib/innate/log/color_formatter.rb".freeze, "lib/innate/log/hub.rb".freeze, "lib/innate/lru_hash.rb".freeze, "lib/innate/mock.rb".freeze, "lib/innate/node.rb".freeze, "lib/innate/options.rb".freeze, "lib/innate/options/dsl.rb".freeze, "lib/innate/options/stub.rb".freeze, "lib/innate/request.rb".freeze, "lib/innate/response.rb".freeze, "lib/innate/route.rb".freeze, "lib/innate/session.rb".freeze, "lib/innate/session/flash.rb".freeze, "lib/innate/spec.rb".freeze, "lib/innate/spec/bacon.rb".freeze, "lib/innate/state.rb".freeze, "lib/innate/state/accessor.rb".freeze, "lib/innate/traited.rb".freeze, "lib/innate/trinity.rb".freeze, "lib/innate/version.rb".freeze, "lib/innate/view.rb".freeze, "lib/innate/view/erb.rb".freeze, "lib/innate/view/etanni.rb".freeze, "lib/innate/view/none.rb".freeze, "spec/example/app/retro_games.rb".freeze, "spec/example/hello.rb".freeze, "spec/example/link.rb".freeze, "spec/example/provides.rb".freeze, "spec/example/session.rb".freeze, "spec/helper.rb".freeze, "spec/innate/action/layout.rb".freeze, "spec/innate/action/layout/file_layout.xhtml".freeze, "spec/innate/cache/common.rb".freeze, "spec/innate/cache/marshal.rb".freeze, "spec/innate/cache/memory.rb".freeze, "spec/innate/cache/yaml.rb".freeze, "spec/innate/dynamap.rb".freeze, "spec/innate/etanni.rb".freeze, "spec/innate/helper.rb".freeze, "spec/innate/helper/aspect.rb".freeze, "spec/innate/helper/cgi.rb".freeze, "spec/innate/helper/flash.rb".freeze, "spec/innate/helper/link.rb".freeze, "spec/innate/helper/redirect.rb".freeze, "spec/innate/helper/render.rb".freeze, "spec/innate/helper/view/aspect_hello.xhtml".freeze, "spec/innate/helper/view/locals.xhtml".freeze, "spec/innate/helper/view/loop.xhtml".freeze, "spec/innate/helper/view/num.xhtml".freeze, "spec/innate/helper/view/partial.xhtml".freeze, "spec/innate/helper/view/recursive.xhtml".freeze, "spec/innate/mock.rb".freeze, "spec/innate/modes.rb".freeze, "spec/innate/node/mapping.rb".freeze, "spec/innate/node/node.rb".freeze, "spec/innate/node/resolve.rb".freeze, "spec/innate/node/view/another_layout/another_layout.xhtml".freeze, "spec/innate/node/view/bar.xhtml".freeze, "spec/innate/node/view/cat2/cat22.xhtml".freeze, "spec/innate/node/view/cat3/cat33.xhtml".freeze, "spec/innate/node/view/foo.html.xhtml".freeze, "spec/innate/node/view/only_view.xhtml".freeze, "spec/innate/node/view/sub/baz.xhtml".freeze, "spec/innate/node/view/sub/foo/baz.xhtml".freeze, "spec/innate/node/view/with_layout.xhtml".freeze, "spec/innate/node/wrap_action_call.rb".freeze, "spec/innate/options.rb".freeze, "spec/innate/parameter.rb".freeze, "spec/innate/provides.rb".freeze, "spec/innate/provides/list.html.xhtml".freeze, "spec/innate/provides/list.txt.xhtml".freeze, "spec/innate/request.rb".freeze, "spec/innate/response.rb".freeze, "spec/innate/route.rb".freeze, "spec/innate/session.rb".freeze, "spec/innate/traited.rb".freeze, "tasks/authors.rake".freeze, "tasks/bacon.rake".freeze, "tasks/changelog.rake".freeze, "tasks/gem.rake".freeze, "tasks/gem_setup.rake".freeze, "tasks/grancher.rake".freeze, "tasks/manifest.rake".freeze, "tasks/rcov.rake".freeze, "tasks/release.rake".freeze, "tasks/reversion.rake".freeze, "tasks/setup.rake".freeze, "tasks/ycov.rake".freeze]
+  s.homepage = "http://github.com/manveru/innate".freeze
+  s.rubygems_version = "3.3.20".freeze
+  s.summary = "Powerful web-framework wrapper for Rack.".freeze
 
   if s.respond_to? :specification_version then
     s.specification_version = 4
+  end
 
-    if Gem::Version.new(Gem::VERSION) >= Gem::Version.new('1.2.0') then
-      s.add_runtime_dependency(%q<rack>, ["~> 3.0"])
-      s.add_development_dependency(%q<bacon>, ["~> 1.2.0"])
-      s.add_development_dependency(%q<rack-test>, ["~> 2.0"])
-      s.add_development_dependency(%q<rackup>, ["~> 0.2"])
-      
-    else
-      s.add_dependency(%q<rack>, ["~> 3.0"])
-      s.add_dependency(%q<bacon>, ["~> 1.2.0"])
-      s.add_dependency(%q<rack-test>, ["~> 2.0"])
-      s.add_dependency(%q<rackup>, ["~> 0.2"])
-    end
+  if s.respond_to? :add_runtime_dependency then
+    s.add_runtime_dependency(%q<rack>.freeze, ["~> 3.0"])
+    s.add_development_dependency(%q<bacon>.freeze, ["~> 1.2.0"])
+    s.add_development_dependency(%q<rack-test>.freeze, ["~> 0.6.3"])
   else
-    s.add_dependency(%q<rack>, ["~> 3.0"])
-    s.add_dependency(%q<bacon>, ["~> 1.2.0"])
-    s.add_dependency(%q<rack-test>, ["~> 2.0"])
-    s.add_dependency(%q<rackup>, ["~> 0.2"])
+    s.add_dependency(%q<rack>.freeze, ["~> 3.0"])
+    s.add_dependency(%q<bacon>.freeze, ["~> 1.2.0"])
+    s.add_dependency(%q<rack-test>.freeze, ["~> 0.6.3"])
   end
 end

@@ -1,3 +1,37 @@
+[171f18d | 2023-01-05 11:40:11 UTC] Michael Faughn <michael.faughn@nist.gov>
+
+  * update gemspec to specify modern version of rack and rack-test and add rackup
+
+[e58eb0b | 2023-01-05 11:38:55 UTC] Michael Faughn <michael.faughn@nist.gov>
+
+  * Use Rackup::Handler instead of Rack::Handler.  Refactor registration of ebb handler registration into #start_ebb.  Not sure this code is covered by the tests but all tests are passing.
+
+[0e8a163 | 2023-01-05 11:11:37 UTC] Michael Faughn <michael.faughn@nist.gov>
+
+  * fix test to expect header keys to be downcase as that is what Rack sends now
+
+[a6158c2 | 2023-01-05 11:09:24 UTC] Michael Faughn <michael.faughn@nist.gov>
+
+  * Fix unless condition in rescue block of Request#local_net? to match any exception message that suggests an invalid address
+
+[15a50ff | 2023-01-05 11:06:44 UTC] Michael Faughn <michael.faughn@nist.gov>
+
+  * Change Rack::File to Rack::Files and Rack::Response#header to #headers to conform with rack ~> 3.0
+
+[972432e | 2023-01-05 11:03:20 UTC] Michael Faughn <michael.faughn@nist.gov>
+
+  * remove Gem::Specification#has_rdoc because it is deprecated and breaks things.
+
+[2da7803 | 2016-05-12 20:45:17 UTC] Michael J. Welch, Ph.D <mjwelchphd@ekgreaders.com>
+
+  * Update adapter.rb.
+
+    In lib/innate/adapter.rb#self.start_webrick, `:BindAddress => config[:Host]` should be `:Host => config[:Host]` because lib/rack/handler/webrick.rb#self.run looks for :Host, not :BindAddress. What this means is, if you're running Ramaze on a remote server, there is no :Host in the options (which returns nil), and so it defaults to localhost, then your browser won't see the site.
+
+[4989626 | 2015-10-28 17:16:46 UTC] Michael Fellinger <m.fellinger@gmail.com>
+
+  * Version 2015.10.28
+
 [105060c | 2015-10-28 17:15:55 UTC] Michael Fellinger <m.fellinger@gmail.com>
 
   * update dependencies and gem setup

@@ -9,7 +9,7 @@ PROJECT_README = 'README.md'
 PROJECT_VERSION = (ENV['VERSION'] || Date.today.strftime('%Y.%m.%d')).dup
 
 DEPENDENCIES = {
-  'rack' => {:version => '~> 1.6.4'},
+  'rack' => {:version => '~> 3.0'},
 }
 
 DEVELOPMENT_DEPENDENCIES = {
