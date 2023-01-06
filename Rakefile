@@ -27,7 +27,6 @@ GEMSPEC = Gem::Specification.new{|s|
   s.platform     = Gem::Platform::RUBY
   s.version      = PROJECT_VERSION
   s.files        = `git ls-files`.split("\n").sort
-  s.has_rdoc     = true
   s.require_path = 'lib'
 }
 
