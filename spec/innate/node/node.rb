@@ -1,4 +1,4 @@
-require 'spec/helper'
+require File.expand_path('../../../helper', __FILE__)
 
 Innate.options.merge!(:views => 'view', :layouts => 'view')
 
@@ -11,6 +11,18 @@ class SpecNode
   def two(arg1, arg2) end
   def more(*args) end
   def default(arg = nil) end
+
+  def cat1__cat11
+    'cat1: cat11'
+  end
+
+  def cat1__cat11__cat111
+    'cat1: cat11: cat111'
+  end
+
+  def cat3_cat33
+    'The wrong 33rd cat.'
+  end
 end
 
 class SpecNodeProvide
@@ -61,6 +73,25 @@ class SpecNodeWithLayoutMethod < SpecNodeProvide
   end
 end
 
+class SpecNodeWithLayoutMethodSymbol < SpecNodeProvide
+  map '/layout_method_symbol'
+  layout :layout_method
+
+  def layout_method
+    '<div class="content">#{@content}</div>'
+  end
+end
+
+class SpecNodeWithLayoutMethodSymbolAndBlock < SpecNodeProvide
+  map '/layout_method_symbol_block'
+  layout(:layout_method) { |wish,path| true }
+
+  def layout_method
+    '<div class="content">#{@content}</div>'
+  end
+end
+
+
 class SpecNodeIndex
   Innate.node('/spec_index')
 
@@ -80,48 +111,62 @@ describe 'Innate::Node' do
   behaves_like :rack_test
 
   should 'respond with 404 if no action was found' do
-    got = Innate::Mock.get('/does_not_exist')
+    got = get('/does_not_exist')
     got.status.should == 404
     got.body.should == 'No action found at: "/does_not_exist"'
     got['Content-Type'].should == 'text/plain'
   end
 
   should 'wrap with layout' do
-    got = Innate::Mock.get('/layout/bar')
+    got = get('/layout/bar')
     got.status.should == 200
     got.body.should == %(<div class="content">42</div>)
     got['Content-Type'].should == 'text/html'
   end
 
   should 'find layout with view_root' do
-    got = Innate::Mock.get('/another_layout/bar')
+    got = get('/another_layout/bar')
     got.status.should == 200
     got.body.should == %(<div class="content">\n  42\n</div>)
     got['Content-Type'].should == 'text/html'
   end
 
   should 'find layout from method' do
-    got = Innate::Mock.get('/layout_method/bar')
+    got = get('/layout_method/bar')
+    got.status.should == 200
+    got.body.should == %(<div class="content">42</div>)
+    got['Content-Type'].should == 'text/html'
+  end
+
+  should 'find layout from method specified as a symbol' do
+    got = get('/layout_method_symbol/bar')
+    got.status.should == 200
+    got.body.should == %(<div class="content">42</div>)
+    got['Content-Type'].should == 'text/html'
+  end
+
+  should 'find layout from method specified as a symbol and a filter block' do
+    got = get('/layout_method_symbol_block/bar')
     got.status.should == 200
     got.body.should == %(<div class="content">42</div>)
     got['Content-Type'].should == 'text/html'
   end
 
   should 'not get an action with wrong parameters' do
-    got = Innate::Mock.get('/spec_index/bar')
+    got = get('/spec_index/bar')
     got.status.should == 404
     got.body.should == 'No action found at: "/bar"'
   end
 
   should 'get an action view if there is no method' do
-    got = Innate::Mock.get('/provide_template/only_view')
+    got = get('/provide_template/only_view')
     got.status.should == 200
     got.body.strip.should == "Only template"
     got['Content-Type'].should == 'text/html'
   end
 
   should 'not get an action view with params if there is no method' do
-    got = Innate::Mock.get('/provide_template/only_view/param')
+    got = get('/provide_template/only_view/param')
     got.status.should == 404
     got.body.strip.should == 'No action found at: "/only_view/param"'
   end
@@ -131,5 +176,35 @@ describe 'Innate::Node' do
     got.status.should == 200
     got.body.strip.should == "<h1>Hello, World!</h1>"
     got['Content-Type'].should == 'text/html'
+  end
+
+  it "does double underscore lookup for method only" do
+    got = get('/cat1/cat11')
+    got.body.should == 'cat1: cat11'
+  end
+
+  it "does double double underscore lookup for method only" do
+    got = get('/cat1/cat11/cat111')
+    got.body.should == 'cat1: cat11: cat111'
+  end
+
+  it "resolves double underscore for template only" do
+    got = get('/cat2/cat22')
+    got.body.should == 'The 22nd cat.'
+  end
+
+  it "resolves double underscore for template and method" do
+    got = get('/cat3/cat33')
+    got.body.should == 'The right 33rd cat.'
+  end
+
+  it 'resolves normal template in subnode ' do
+    got = get('/sub/baz')
+    got.body.should == 'This is baz, cheer up!'
+  end
+
+  it 'resolves nested template in subnode' do
+    got = get('/sub/foo/baz')
+    got.body.should == 'This is foo/baz, cheer up!'
   end
 end

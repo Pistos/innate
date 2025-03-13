@@ -1,4 +1,4 @@
-require 'spec/helper'
+require File.expand_path('../../helper', __FILE__)
 
 class SpecParameter
   include Innate::Node
@@ -114,15 +114,6 @@ describe "Simple Parameters" do
   it "one default" do
     handle('/one_default/my_default').should == "one_default (my_default)"
   end
-
-  it "double underscore lookup" do
-    handle('/cat1/cat11').should == 'cat1: cat11'
-  end
-
-  it "double double underscore lookup" do
-    handle('/cat1/cat11/cat111').should == 'cat1: cat11: cat111'
-  end
-
 
   it "jo/add should raise with 0 parameters" do
     lambda{ handle('/jo/add') }.

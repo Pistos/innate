@@ -29,7 +29,7 @@ module Innate
       req = current[:request] = request.new(env)
       res = current[:response] = response.new
       current[:actions] = []
-      current[:session] = Session.new(req, res)
+      current[:session] = session.new(req, res)
     end
   end
 end

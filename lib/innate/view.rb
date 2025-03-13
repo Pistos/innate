@@ -30,7 +30,7 @@ module Innate
 
     def exts_of(engine)
       name = engine.to_s
-      ENGINE.reject{|k,v| v != name }.keys
+      ENGINE.reject{|ext, klass| klass != name }.keys
     end
 
     # Try to obtain given engine by its registered name.
@@ -49,10 +49,14 @@ module Innate
     # on the first request (before TEMP is set).
     # No mutex is used in Fiber environment, see Innate::State and subclasses.
     def obtain(klass, root = Object)
-      Thread.exclusive{
-        klass.to_s.scan(/\w+/){|part| root = root.const_get(part) }
-        return root
-      }
+      Innate.sync do
+        view_name = /^#{klass.to_s.downcase.dup.delete('_')}$/i
+        if view = View.constants.grep(view_name).first
+          root.const_get(view)
+        else
+          raise(NameError, "View #{klass} not found")
+        end
+      end
     end
 
     # Reads the specified view template from the filesystem. When the read_cache

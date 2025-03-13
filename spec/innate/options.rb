@@ -1,4 +1,4 @@
-require 'spec/helper'
+require File.expand_path('../../helper', __FILE__)
 
 Options = Innate::Options
 
@@ -104,9 +104,7 @@ describe Options do
 
   should 'pretty_print' do
     require 'pp'
-    p = PP.new
-    @options.pretty_print(p)
-    lines = p.output.split(/\n/)
+    lines = @options.pretty_inspect.split(/\n/)
     lines.find_all{|l|
       /:doc/ === l &&
       /:value/ === l
@@ -119,5 +117,16 @@ describe Options do
     set.should.be.nil
     @options.port = 300
     set.should == 300
+  end
+  should 'return default value' do
+    @options.default('my default', 'jeremy' )
+    @options.fake.should == 'jeremy'
+  end
+  should 'not change default value' do
+    @options.fake1.should == 'jeremy'
+    @options.fake2.should == 'jeremy'
+    @options.fake1 = 'zurcher'
+    @options.fake1.should == 'zurcher'
+    @options.fake2.should == 'jeremy'
   end
 end

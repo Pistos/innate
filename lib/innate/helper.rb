@@ -77,7 +77,7 @@ module Innate
         :exts, %w[rb so bundle]
 
       o "Default helpers, added on inclusion of the Helper module",
-        :default, [:aspect, :cgi, :flash, :link, :render, :redirect, :send_file]
+        :default, [:aspect, :cgi, :flash, :link, :render, :redirect]
     end
 
     EXTS = %w[rb so bundle]
@@ -152,7 +152,7 @@ module Innate
     # helper :foo_bar # => FooBar
     # helper :foo # => Foo
     def get(name)
-      module_name = /^#{name.to_s.dup.delete('_')}$/i
+      module_name = /^#{name.to_s.dup.delete('_')}(?:helper)?$/i
 
       options.namespaces.each do |namespace|
         found = namespace.constants.grep(module_name).first

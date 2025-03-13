@@ -1,3 +1,8 @@
+.gems
+.gitignore
+.load_gemset
+.rvmrc
+.travis.yml
 AUTHORS
 CHANGELOG
 COPYING
@@ -32,6 +37,7 @@ lib/innate/cache/marshal.rb
 lib/innate/cache/memory.rb
 lib/innate/cache/yaml.rb
 lib/innate/current.rb
+lib/innate/default_middleware.rb
 lib/innate/dynamap.rb
 lib/innate/helper.rb
 lib/innate/helper/aspect.rb
@@ -40,11 +46,10 @@ lib/innate/helper/flash.rb
 lib/innate/helper/link.rb
 lib/innate/helper/redirect.rb
 lib/innate/helper/render.rb
-lib/innate/helper/send_file.rb
 lib/innate/log.rb
 lib/innate/log/color_formatter.rb
 lib/innate/log/hub.rb
-lib/innate/middleware_compiler.rb
+lib/innate/lru_hash.rb
 lib/innate/mock.rb
 lib/innate/node.rb
 lib/innate/options.rb
@@ -79,6 +84,7 @@ spec/innate/cache/marshal.rb
 spec/innate/cache/memory.rb
 spec/innate/cache/yaml.rb
 spec/innate/dynamap.rb
+spec/innate/etanni.rb
 spec/innate/helper.rb
 spec/innate/helper/aspect.rb
 spec/innate/helper/cgi.rb
@@ -86,7 +92,6 @@ spec/innate/helper/flash.rb
 spec/innate/helper/link.rb
 spec/innate/helper/redirect.rb
 spec/innate/helper/render.rb
-spec/innate/helper/send_file.rb
 spec/innate/helper/view/aspect_hello.xhtml
 spec/innate/helper/view/locals.xhtml
 spec/innate/helper/view/loop.xhtml
@@ -100,8 +105,12 @@ spec/innate/node/node.rb
 spec/innate/node/resolve.rb
 spec/innate/node/view/another_layout/another_layout.xhtml
 spec/innate/node/view/bar.xhtml
+spec/innate/node/view/cat2/cat22.xhtml
+spec/innate/node/view/cat3/cat33.xhtml
 spec/innate/node/view/foo.html.xhtml
 spec/innate/node/view/only_view.xhtml
+spec/innate/node/view/sub/baz.xhtml
+spec/innate/node/view/sub/foo/baz.xhtml
 spec/innate/node/view/with_layout.xhtml
 spec/innate/node/wrap_action_call.rb
 spec/innate/options.rb
@@ -110,6 +119,7 @@ spec/innate/provides.rb
 spec/innate/provides/list.html.xhtml
 spec/innate/provides/list.txt.xhtml
 spec/innate/request.rb
+spec/innate/response.rb
 spec/innate/route.rb
 spec/innate/session.rb
 spec/innate/traited.rb

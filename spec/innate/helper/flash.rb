@@ -1,4 +1,4 @@
-require 'spec/helper'
+require File.expand_path('../../../helper', __FILE__)
 
 class SpecFlash
   include Innate::Node
@@ -103,7 +103,7 @@ describe Innate::Helper::Flash do
 
   should 'inspect combined' do
     get('/welcome')
-    get('/inspect').body.should == {:name => 'manveru', :yes => :yeah}.inspect
+    eval(get('/inspect').body).should == {:name => 'manveru', :yes => :yeah}
   end
 
   should 'iterate over combined' do

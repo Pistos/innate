@@ -14,7 +14,7 @@ task :gem_setup do
       setup
     end
 
-    def gem(name, version = nil, options = {})
+    def use_gem(name, version = nil, options = {})
       if version.respond_to?(:merge!)
         options = version
       else
@@ -26,8 +26,7 @@ task :gem_setup do
 
     # all gems defined, let's try to load/install them
     def setup
-      require 'rubygems'
-      require 'rubygems/dependency_installer'
+      require 'rubygems/commands/install_command'
 
       @gems.each do |name, options|
         setup_gem(name, options)
@@ -37,48 +36,53 @@ task :gem_setup do
     def setup_gemspec(gemspec)
       gemspec.dependencies.each do |dependency|
         dependency.version_requirements.as_list.each do |version|
-          gem(dependency.name, version)
+          use_gem(dependency.name, version)
         end
       end
 
       setup
     end
 
-    # first try to activate, install and try to activate again if activation
-    # fails the first time
+    # First try to activate.
+    # If activation fails, try to install and activate again.
+    # If the second activation also fails, try to require as it may just as
+    # well be in $LOAD_PATH.
     def setup_gem(name, options)
-      version = [options[:version]].compact
+      try_require_gem(name, options)
+    rescue Exception
+      try_installing_gem(name, options)
+    end
+
+    def try_require_gem(name, options)
       lib_name = options[:lib] || name
-
-      log "activating #{name}"
-
-      Gem.activate(name, *version)
-    rescue LoadError
-      install_gem(name, options)
-      Gem.activate(name, *version)
+      version = [options[:version]].compact
+      gem name, version[0]
+      require lib_name
     end
 
-    # tell rubygems to install a gem
-    def install_gem(name, options)
-      installer = Gem::DependencyInstaller.new(options)
+    def try_installing_gem(name, options)
+      cmd = Gem::Commands::InstallCommand.new
+      version = [options[:version]].compact
 
-      temp_argv(options[:extconf]) do
-        log "Installing #{name}"
-        installer.install(name, options[:version])
+      if version.any?
+        version.each do |v|
+          cmd.handle_options(["--no-ri", "--no-rdoc", "--user-install", name, '--version', v])
+          Process.waitpid fork{
+            begin
+              cmd.execute
+            rescue Exception
+            end
+          }
+        end
+      else
+        cmd.handle_options(["--no-ri", "--no-rdoc", "--user-install", name])
+        Process.waitpid fork{
+          begin
+            cmd.execute
+          rescue Exception
+          end
+        }
       end
-    end
-
-    # prepare ARGV for rubygems installer
-    def temp_argv(extconf)
-      if extconf ||= @options[:extconf]
-        old_argv = ARGV.clone
-        ARGV.replace(extconf.split(' '))
-      end
-
-      yield
-
-    ensure
-      ARGV.replace(old_argv) if extconf
     end
 
     private
@@ -93,7 +97,6 @@ task :gem_setup do
       end
     end
 
-    def rubyforge; 'http://gems.rubyforge.org/' end
     def github; 'http://gems.github.com/' end
   end
 end

@@ -1,4 +1,4 @@
-require 'spec/helper'
+require File.expand_path('../../../helper', __FILE__)
 
 class SpecHelperRenderFull
   Innate.node '/render_full'
@@ -86,11 +86,28 @@ class SpecHelperRenderFile
   FILE = File.expand_path('../view/aspect_hello.xhtml', __FILE__)
 
   def absolute
+    @bar = 'bar'
     render_file(FILE)
   end
 
   def absolute_with(foo, bar)
+    @foo = 'foo'
     render_file(FILE, :foo => foo, :bar => bar)
+  end
+end
+
+class SpecHelperRenderNeedsMethodView
+  Innate.node '/render_needs_method_view'
+  map_views '/'
+  layout :layout
+  trait :needs_method => true
+
+  def layout
+    '{ #{@content} }'
+  end
+
+  def without_method_or_layout
+    render_view(:num, :n => 42)
   end
 end
 
@@ -137,6 +154,10 @@ describe Innate::Helper::Render do
     it 'renders action without calling the method or applying layout' do
       get('/render_view/without_method_or_layout').body.should == '{ 42 }'
     end
+
+    it 'renders action even when needs_method is true' do
+      get('/render_needs_method_view/without_method_or_layout').body.should == '{ 42 }'
+    end
   end
 
   describe 'misc functionality' do
@@ -155,7 +176,7 @@ describe Innate::Helper::Render do
     behaves_like :rack_test
 
     it 'renders file from absolute path' do
-      get('/render_file/absolute').body.should == '{ ! }'
+      get('/render_file/absolute').body.should == '{ bar! }'
     end
 
     it 'renders file from absolute path with variables' do

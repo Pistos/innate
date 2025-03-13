@@ -1,5 +1,4 @@
-Rack::Handler.register('ebb', 'Rack::Handler::Ebb')
-
+require 'rackup/handler'
 module Innate
 
   # Lightweight wrapper around Rack::Handler, will apply our options in a
@@ -39,7 +38,7 @@ module Innate
       if respond_to?(method = "start_#{handler}")
         send(method, app, config)
       else
-        Rack::Handler.get(handler).run(app, config)
+        Rackup::Handler.get(handler).run(app, config)
       end
     end
 
@@ -48,19 +47,23 @@ module Innate
     # rubygems and uses the C require directly.
     def self.start_ebb(app, config)
       require 'ebb'
-      Rack::Handler.get('ebb').run(app, config)
+      # Rack doesn't ship with ebb handler, but it doesn't get picked up under some
+      # circumstances, so we do that here.
+      # Jruby Rack doesn't have the Handler::register method, so we have to check.
+      # This has changed since Rack moved Handler to Rackup.  Not sure about JRuby
+      if Rackup::Handler.respond_to?(:register)
+        Rackup::Handler.register('ebb', 'Rackup::Handler::Ebb')
+      end
+      Rackup::Handler.get('ebb').run(app, config)
     end
 
     # We want webrick to use our logger.
     def self.start_webrick(app, config)
-      handler = Rack::Handler.get('webrick')
+      handler = Rackup::Handler.get('webrick')
       config = {
-        :BindAddress => config[:Host],
+        :Host => config[:Host],
         :Port => config[:Port],
         :Logger => Log,
-        :AccessLog => [
-          [Log, ::WEBrick::AccessLog::COMMON_LOG_FORMAT],
-          [Log, ::WEBrick::AccessLog::REFERER_LOG_FORMAT]]
       }
 
       handler.run(app, config)
@@ -68,9 +71,18 @@ module Innate
 
     # Thin shouldn't give excessive output, especially not to $stdout
     def self.start_thin(app, config)
-      handler = Rack::Handler.get('thin')
+      handler = Rackup::Handler.get('thin')
       ::Thin::Logging.silent = true
       handler.run(app, config)
+    end
+
+    # A simple Unicorn wrapper.
+    def self.start_unicorn(app, config)
+      require 'unicorn'
+      config = {
+        :listeners => ["#{config[:Host]}:#{config[:Port]}"]
+      }
+      ::Unicorn.run(app, config)
     end
   end
 end

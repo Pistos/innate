@@ -1,4 +1,4 @@
-require 'spec/helper'
+require File.expand_path('../../helper', __FILE__)
 require 'innate/helper'
 
 module Innate
@@ -14,6 +14,12 @@ module Innate
     module FrownHelper
       def frown
         ':('
+      end
+    end
+
+    module FooBarHelper
+      def self.baz
+        "baz"
       end
     end
   end
@@ -54,13 +60,13 @@ describe Innate::Helper::Link do
     FNL.r(:index, :foo => :bar).should == URI('/foo/index?foo=bar')
 
     uri = FNL.r(:index, :a => :b, :x => :y)
-    uri.query.split(';').sort.should == %w[a=b x=y]
+    uri.query.split('&').sort.should == %w[a=b x=y]
   end
 
   should 'construct link from ::a' do
     FNL.a(:index).should == '<a href="/foo/index">index</a>'
     FNL.a('index', :index, :x => :y).should == '<a href="/foo/index?x=y">index</a>'
-    FNL.a('duh/bar', 'duh/bar', :x => :y).should == '<a href="/foo/duh/bar?x=y">duh/bar</a>'
+    FNL.a('duh/bar', 'duh/bar', :x => :y).should == "<a href=\"/foo/duh/bar?x=y\">duh&#x2F;bar</a>"
     FNL.a('foo', :/, :x => :y).should == '<a href="/foo/?x=y">foo</a>'
   end
 
@@ -82,5 +88,10 @@ describe Innate::Helper::Link do
       Innate::HelpersHelper.try_require(:foo)
     }.should.raise(LoadError).
       message.should == "Helper foo not found"
+  end
+
+  should 'allow helper to be suffixed with "helper"' do
+    Innate::HelpersHelper.get(:foo_bar).baz.should == "baz"
+    Innate::HelpersHelper.get(:foo_bar_helper).baz.should == "baz"
   end
 end

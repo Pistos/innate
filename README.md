@@ -5,7 +5,7 @@ Innate is the core of Ramaze, but useful on its own.
 
 ## Philosophy
 
-The philosophy behind Innate is to provide a simple web-framework that:
+The philosophy behind Innate is to provide a simple web framework that:
 
 * Stays below 2000 easily readable lines of code
 * Has Rack as the only dependency
@@ -48,7 +48,7 @@ sequel, logging with analogger or growl, templating with haml or erubis, just to
 name a few.
 
 Ramaze also adds Apps to the mix, and it is easier to understand them when the
-concepts of what's going on inside an App is completely abstracted by Innate.
+concepts of what's going on inside an App are completely abstracted by Innate.
 
 To summarize, Innate really keeps it simple, acts as a learning tool and
 encourages everybody to build on top of it whatever they want.
@@ -115,9 +115,10 @@ And another example, using Node with a normal server:
 Installing Innate from git is highly recommended, since it gives you easy
 access to alternate branches, bugfixes, and new features.
 
-    git clone git://github.com/manveru/innate.git
+    git clone git://github.com/Ramaze/innate.git
 
-And add the innate/lib directory to your `RUBYLIB` environment variable.
+Do not forget to add the innate/lib directory to your `RUBYLIB` environment
+variable.
 
 For unixish systems you may want to add it to `~/.bashrc` or the equivalent for
 your shell:
@@ -126,15 +127,11 @@ your shell:
 
 ### Via gem install
 
-#### From Github
+    gem install innate
 
-    gem install manveru-innate --source=http://gems.github.com
+### Direct download
 
-#### From Rubyforge
-
-Not yet, and not sure when I'll get around to do this, feel free to ask if you
-want to maintain the project at rubyforge.
-
+Download the latest tarball from [here](http://github.com/Ramaze/innate/tarball/master).
 
 ## Concepts
 
@@ -159,26 +156,17 @@ the list yet.
 
 ### View
 
-Innate has support for only
 Innate supports multiple templating engines and it is very easy to add your
-own.
-At the moment we offer following engines out of the box:
+own. At the moment we offer following engines out of the box:
 
-* [Builder](http://builder.rubyforge.org)
-* [Haml](http://haml.hamptoncatlin.com/)
-* [Sass](http://haml.hamptoncatlin.com/docs/sass)
-* [Erubis](http://rubyforge.org/projects/erubis)
-* [Tenjin](http://www.kuwata-lab.com/tenjin/)
-
-How to build your own is discussed at
-[HowTo:View](http://ramaze.net/HowTo:View).
-
+* ERB
+* Etanni
 
 ### Controller
 
 Innate follows a different approach than most frameworks, making the controller
 subclassing obsolete. To make an object accessible from the outside simply
-include Innate::Node and map it to the location you would like.
+include Innate::Node and map it to the location you would like to serve.
 
 
 ## Differences from Ramaze
@@ -194,13 +182,13 @@ Ramaze started out without any of the benefits that Rack gives us these days,
 especially regarding the server handlers, request/response, and middleware.
 
 Still it tried to provide everything one might need with the least effort,
-leading to a lot of incorporation of dependencies (we have things like bacon,
-simple_http, gettext, mime types, ...)
+leading to a lot dependencies (we had things like bacon, simple_http, gettext,
+mime types, ...)
 
 
 ### Configuration
 
-Innate provides the Innate::Options DSL, in some aspects to the old
+Innate provides the Innate::Options DSL, similar in some aspects to the old
 Ramaze::Global, but a lot more flexible.
 
 Options has namespaces, inheritance, defaults, triggers, documentation, and a
@@ -272,7 +260,7 @@ actions.
 
 This strikes me as important, because I consider layouts to be superior to
 Ezamar elements and equal to render_partial or render_template, just about
-every application uses it, so they should be handled in the best way possible.
+every application uses them, so they should be handled in the best way possible.
 
 The root directory for layouts is in line with the other default locations:
 
@@ -284,7 +272,7 @@ The root directory for layouts is in line with the other default locations:
     `-- view
 
 While none of these directories is necessary, they are the default locations and
-should be included in a new proto for Ramaze (just that ramaze uses
+should be included in a new proto for Ramaze (except that ramaze uses
 `/controller` instead of `/node`.
 
 Innate will not have project generating capabilities, so we just have to
@@ -315,7 +303,7 @@ a suitable layout as well.
 
 This is very alien to old Ramaze, which always has a 1:1 mapping between actions
 and their views and how they are rendered, which made people wonder how to serve
-sass as css or how to respond with json for a ajax request until they finally
+sass as css or how to respond with json for a AJAX request until they finally
 were pointed to setting content-type, using respond and setting up custom
 routes.
 
@@ -356,7 +344,7 @@ right for any web application.
 Innate defines the caching API that enables everybody to add caches with very
 little code.
 
-Innate provides caching by following means:
+Innate provides caching by the following means:
 
 * DRb
 * Hash
@@ -373,7 +361,7 @@ And as time goes on there will be many more.
 
 ### Response
 
-Very little code, just provide some options regarding default headers and easy
+Very little code, it just provides some options regarding default headers and easy
 ways to reset the response.
 Ramaze adds some more convenient methods.
 
@@ -413,7 +401,7 @@ Despite being quite popular it has many issues and is totally unusable if you
 don't have full knowledge about what is going to be served.
 
 I and a lot of other people have used this over time and it has proven itself
-to be a very easy and straight-forward way of doing localization.
+to be a very easy and straightforward way of doing localization.
 
 It think it is better suited as middleware which can be included into
 rack-contrib and doesn't rely on the normal session but a simple unobfuscated
@@ -430,7 +418,7 @@ This one was removed, Rack::Mime is the way to go.
 ### Spec helpers
 
 Over the years, Ramaze has collected a wide variety of spec helpers that are
-not really compatible to each other and rely on real request/response with a
+not really compatible with each other and rely on real request/response with a
 running server.
 
 Innate provides a better alternative via Innate::Mock for specs, the output
@@ -470,7 +458,7 @@ there is no need to keep this around.
 
 ### Contrib
 
-Ramaze got quite some things in contrib, some of them used widely, others not at
+Ramaze has some things in contrib, some of them used widely, others not at
 all.
 
 I'm still going through these, putting what is suitable for a wider audience
@@ -507,8 +495,8 @@ Ruby stdlib.
 
 ### Templating
 
-The basic functionality for templating is provided by Innate, it only provides a
-`None` and `ERB` templating engine. The other engines are in Ramaze.
+The basic functionality for templating is provided by Innate, it only provides the
+`None`, `Etanni` and `ERB` templating engines. The other engines are in Ramaze.
 
 #### Ezamar
 

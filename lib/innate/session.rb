@@ -36,11 +36,10 @@ module Innate
         :expires, nil
       o "Time to live for session cookies and cache, nil/false will prevent setting",
         :ttl, (60 * 60 * 24 * 30) # 30 days
-
-      trigger(:expires){|v|
-        self.ttl = v - Time.now.to_i
-        Log.warn("Innate::Session.options.expires is deprecated, use #ttl instead")
-      }
+      o "Length of generated Session ID (only applies when using SecureRandom)",
+        :sid_length, 64
+      o "cookie cannot be accessed through client side script (http://www.owasp.org/index.php/HttpOnly)",
+        :httponly, false
     end
 
     attr_reader :cookie_set, :request, :response, :flash
@@ -48,6 +47,7 @@ module Innate
     def initialize(request, response)
       @request, @response = request, response
       @cookie_set = false
+      @force_new_cookie = false
       @cache_sid = nil
       @flash = Flash.new(self)
     end
@@ -87,6 +87,13 @@ module Innate
       @sid ||= cookie || generate_sid
     end
 
+    def resid!
+      cache_sid
+      cache.delete(sid)
+      @sid = generate_sid
+      @force_new_cookie = true
+    end
+
     private
 
     def cache_sid
@@ -102,15 +109,21 @@ module Innate
     end
 
     def set_cookie(response)
-      return if @cookie_set || cookie
+      return if @cookie_set || (!@force_new_cookie && cookie)
 
       @cookie_set = true
       response.set_cookie(options.key, cookie_value)
+      @force_new_cookie = false
     end
 
     def cookie_value
       o = options
-      cookie = {:domain => o.domain, :path => o.path, :secure => o.secure}
+      cookie = {
+        :domain => o.domain,
+        :path => o.path,
+        :secure => o.secure,
+        :httponly => o.httponly
+      }
       cookie[:expires] = (Time.now + o.ttl) if o.ttl
       cookie.merge!(:value => sid)
     end
@@ -122,8 +135,32 @@ module Innate
 
     begin
       require 'securerandom'
-      def sid_algorithm; SecureRandom.hex(32); end
+
+      # Using SecureRandom, optional length.
+      # SecureRandom is available since Ruby 1.8.7.
+      # For Ruby versions earlier than that, you can require the uuidtools gem,
+      # which has a drop-in replacement for SecureRandom.
+      def sid_algorithm; SecureRandom.hex(options.sid_length); end
     rescue LoadError
+      require 'openssl'
+
+      # Using OpenSSL::Random for generation, this is comparable in performance
+      # with stdlib SecureRandom and also allows for optional length, it should
+      # have the same behaviour as the SecureRandom::hex method of the
+      # uuidtools gem.
+      def sid_algorithm
+        OpenSSL::Random.random_bytes(options.sid_length / 2).unpack('H*')[0]
+      end
+    rescue LoadError
+      warn "Falling back to low-entropy Session ID generation"
+      warn "Avoid this by upgrading Ruby, installing OpenSSL, or UUIDTools"
+
+      # Digest::SHA2::hexdigest produces a string of length 64, although
+      # collisions are not very likely, the entropy is still very low and
+      # length is not optional.
+      #
+      # Replacing it with OS-provided random data would take a lot of code and
+      # won't be as cross-platform as Ruby.
       def sid_algorithm
         entropy = [ srand, rand, Time.now.to_f, rand, $$, rand, object_id ]
         Digest::SHA2.hexdigest(entropy.join)

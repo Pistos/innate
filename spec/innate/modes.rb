@@ -1,4 +1,4 @@
-require 'spec/helper'
+require File.expand_path('../../helper', __FILE__)
 
 class SpecModeDummy
   Innate.node '/'
@@ -16,12 +16,11 @@ describe 'Innate modes' do
   describe 'dev' do
     behaves_like :rack_test
     Innate.options.mode = :dev
-
     should 'handle GET request' do
       get('/').status.
         should == 200
       last_response.headers.
-        should == {'Content-Length' => '13', 'Content-Type' => 'text/html'}
+        should == {'content-length' => '13', 'content-type' => 'text/html'}
       last_response.body.
         should == 'Hello, World!'
     end
@@ -30,7 +29,7 @@ describe 'Innate modes' do
       head('/').status.
         should == 200
       last_response.headers.
-        should == {'Content-Length' => '13', 'Content-Type' => 'text/html'}
+        should == {'content-length' => '13', 'content-type' => 'text/html'}
       last_response.body.
         should == ''
     end
@@ -44,7 +43,7 @@ describe 'Innate modes' do
       get('/').status.
         should == 200
       last_response.headers.
-        should == {'Content-Length' => '13', 'Content-Type' => 'text/html'}
+        should == {'content-length' => '13', 'content-type' => 'text/html'}
       last_response.body.
         should == 'Hello, World!'
     end
@@ -53,7 +52,7 @@ describe 'Innate modes' do
       head('/').status.
         should == 200
       last_response.headers.
-        should == {'Content-Length' => '13', 'Content-Type' => 'text/html'}
+        should == {'content-length' => '13', 'content-type' => 'text/html'}
       last_response.body.
         should == ''
     end

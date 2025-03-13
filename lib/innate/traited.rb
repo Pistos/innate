@@ -47,21 +47,23 @@ module Innate
     # Builds a trait from all the ancestors, closer ancestors overwrite distant
     # ancestors
     #
-    # class Foo
-    #   include Innate::Traited
-    #   trait :one => :eins, :first => :erstes
-    # end
+    # @example
+    #  class Foo
+    #    include Innate::Traited
+    #    trait :one => :eins, :first => :erstes
+    #  end
     #
-    # class Bar < Foo
-    #   trait :two => :zwei
-    # end
+    #  class Bar < Foo
+    #    trait :two => :zwei
+    #  end
     #
-    # class Foobar < Bar
-    #   trait :three => :drei, :first => :overwritten
-    # end
+    #  class Foobar < Bar
+    #    trait :three => :drei, :first => :overwritten
+    #  end
     #
-    # Foobar.ancestral_trait
-    # # => {:three => :drei, :two => :zwei, :one => :eins, :first => :overwritten}
+    #  Foobar.ancestral_trait # => {
+    #    :three => :drei, :two => :zwei, :one => :eins, :first => :overwritten
+    #  }
     def ancestral_trait
       klass = self.kind_of?(Module) ? self : self.class
       ANCESTRAL_TRAITS[klass] ||=

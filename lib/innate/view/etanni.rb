@@ -2,32 +2,37 @@ module Innate
   module View
     module Etanni
       def self.call(action, string)
-        etanni = View.compile(string){|s| Innate::Etanni.new(s) }
-        html = etanni.result(action.binding, (action.view || action.method))
-        return html, 'text/html'
+        etanni = View.compile(string) do |str|
+          filename = action.view || action.method
+          Innate::Etanni.new(str, filename)
+        end
+        etanni.result(action.instance)
       end
     end
   end
 
   class Etanni
     SEPARATOR = "E69t116A65n110N78i105S83e101P80a97R82a97T84o111R82"
-    START = "\n<<#{SEPARATOR}.chomp\n"
+    CHOMP = "<<#{SEPARATOR}.chomp!"
+    START = "\n_out_ << #{CHOMP}\n"
     STOP = "\n#{SEPARATOR}\n"
-    ADD = "_out_ << "
+    REPLACEMENT = "#{STOP}\\1#{START}"
 
-    def initialize(template)
+    def initialize(template, filename = '<Etanni>')
       @template = template
+      @filename = filename
       compile
     end
 
-    def compile
-      temp = @template.dup
-      temp.gsub!(/<\?r\s+(.*?)\s+\?>/m, "#{STOP} \\1; #{ADD} #{START}")
-      @compiled = "_out_ = #{START} #{temp} #{STOP} _out_"
+    def compile(filename = @filename)
+      temp = @template.strip
+      temp.gsub!(/<\?r\s+(.*?)\s+\?>/m, REPLACEMENT)
+      @compiled = eval("Proc.new{ _out_ = [#{CHOMP}]\n#{temp}#{STOP}_out_.join }",
+        nil, @filename)
     end
 
-    def result(binding, filename = '<Etanni>')
-      eval(@compiled, binding, filename).to_s.strip
+    def result(instance, filename = @filename)
+      instance.instance_eval(&@compiled)
     end
   end
 end

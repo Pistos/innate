@@ -5,7 +5,7 @@ module Innate
   #
   # This middleware should wrap Innate::DynaMap.
   #
-  # Please note that Rack::File is put before Route and Rewrite, that means
+  # Please note that Rack::Files is put before Route and Rewrite, that means
   # that you cannot apply routes to static files unless you add your own route
   # middleware before.
   #
@@ -51,7 +51,7 @@ module Innate
     end
 
     def self.[]=(key, value)
-      self::ROUTES.delete_if{|k,v| k == key }
+      self::ROUTES.delete_if{|route_key, route_value| route_key == key }
       self::ROUTES << [key, value]
     end
 

@@ -1,13 +1,21 @@
-require 'rake'
 require 'rake/clean'
-require 'rake/gempackagetask'
+require 'rubygems/package_task'
 require 'time'
 require 'date'
 
-PROJECT_SPECS = FileList['spec/{innate,example}/**/*.rb'].exclude('common.rb')
+PROJECT_SPECS = FileList['spec/{innate,example}/**/*.rb'].exclude('spec/innate/cache/common.rb')
 PROJECT_MODULE = 'Innate'
 PROJECT_README = 'README.md'
-PROJECT_VERSION = ENV['VERSION'] || Date.today.strftime('%Y.%m.%d')
+PROJECT_VERSION = (ENV['VERSION'] || Date.today.strftime('%Y.%m.%d')).dup
+
+DEPENDENCIES = {
+  'rack' => {:version => '~> 3.0'},
+}
+
+DEVELOPMENT_DEPENDENCIES = {
+  'bacon'     => {:version => '~> 1.2.0'},
+  'rack-test' => {:version => '~> 0.6.3', :lib => 'rack/test'}
+}
 
 GEMSPEC = Gem::Specification.new{|s|
   s.name         = 'innate'
@@ -19,18 +27,16 @@ GEMSPEC = Gem::Specification.new{|s|
   s.platform     = Gem::Platform::RUBY
   s.version      = PROJECT_VERSION
   s.files        = `git ls-files`.split("\n").sort
-  s.has_rdoc     = true
   s.require_path = 'lib'
-  s.rubyforge_project = "innate"
-  s.required_rubygems_version = '>= 1.3.1'
-
-  s.add_dependency('rack', '~> 1.0.0')
-
-  # rip those out if they cause you trouble
-  s.add_development_dependency('bacon',     '>= 1.1.0')
-  s.add_development_dependency('json',      '~> 1.1.6')
-  s.add_development_dependency('rack-test', '>= 0.3.0')
 }
+
+DEPENDENCIES.each do |name, options|
+  GEMSPEC.add_dependency(name, options[:version])
+end
+
+DEVELOPMENT_DEPENDENCIES.each do |name, options|
+  GEMSPEC.add_development_dependency(name, options[:version])
+end
 
 Dir['tasks/*.rake'].each{|f| import(f) }
 

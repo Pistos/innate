@@ -3,14 +3,14 @@ class Logger
   #
   # The basic mapping of ANSI colors is as follows:
   #
-  #     | reset | bold | dark | underline | blink | negative
-  # MOD |     0 |    1 |    2 |         4 |     5 |        7
+  #         | reset | bold | dark | underline | blink | negative
+  #     MOD |     0 |    1 |    2 |         4 |     5 |        7
   #
-  #    | black | red | green | yellow | blue | magenta | cyan | white
-  # FG |    30 |  31 |    32 |     33 |   34 |      35 |   36 |    37
-  # BG |    40 |  41 |    42 |     43 |   44 |      45 |   46 |    47
+  #        | black | red | green | yellow | blue | magenta | cyan | white
+  #     FG |    30 |  31 |    32 |     33 |   34 |      35 |   36 |    37
+  #     BG |    40 |  41 |    42 |     43 |   44 |      45 |   46 |    47
   #
-  # The output is done by: "\e[#{mod};#{fg};#{bg}m#{string}\e[0m"
+  # The output is done by: ``\e[#{mod};#{fg};#{bg}m#{string}\e[0m``.
   # The suffix is to reset the terminal to the original state again.
   class ColorFormatter < Formatter
     LEVEL_COLOR = {

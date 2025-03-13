@@ -1,10 +1,5 @@
-begin
-  require 'json'
-rescue LoadError
-  exit
-end
+require File.expand_path('../../helper', __FILE__)
 
-require 'spec/helper'
 require 'yaml'
 
 Innate.options.merge!(:views => 'provides', :layouts => 'provides')
@@ -14,7 +9,6 @@ class SpecNodeProvides
 
   provide(:html, :engine => :None)
   provide(:yaml, :type => 'text/yaml'){|a,s| s.to_yaml }
-  provide(:json, :type => 'application/json'){|a,s| s.to_json }
 
   def object
     {'intro' => 'Hello, World!'}
@@ -23,6 +17,10 @@ class SpecNodeProvides
   def string
     'Just 42'
   end
+
+  def args(*args)
+    args
+  end
 end
 
 class SpecNodeProvidesTemplates
@@ -30,7 +28,6 @@ class SpecNodeProvidesTemplates
   map_views '/'
 
   provide(:yaml, :type => 'text/yaml'){|a,s| s.to_yaml }
-  provide(:json, :type => 'application/json'){|a,s| s.to_json }
   provide(:txt, :engine => :Etanni, :type => 'text/plain')
 
   def list
@@ -55,16 +52,18 @@ describe 'Content representation' do
       assert_wish('/object.yaml', {'intro' => 'Hello, World!'}.to_yaml, 'text/yaml')
     end
 
-    it 'provides json for an object' do
-      assert_wish('/object.json', {'intro' => 'Hello, World!'}.to_json, 'application/json')
-    end
-
     it 'provides html for an object' do
       assert_wish('/string.html', 'Just 42', 'text/html')
     end
 
     it 'defaults to html presentation' do
       assert_wish('/string', 'Just 42', 'text/html')
+    end
+
+    it 'takes arguments with <name>/arg1/arg2.yaml' do
+      assert_wish('/args', [].to_s, 'text/html')
+      assert_wish('/args.yaml', [].to_yaml, 'text/yaml')
+      assert_wish('/args/a/b/c.yaml', ['a', 'b', 'c'].to_yaml, 'text/yaml')
     end
   end
 

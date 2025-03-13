@@ -1,0 +1,2 @@
+rvm --install --create use 1.9.3@innate
+[[ -s .gems ]] && rvm gemset import .gems

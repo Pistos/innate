@@ -1,0 +1,5 @@
+# .gems generated gem export file. Note that any env variable settings will be missing. Append these after using a ';' field separator
+
+bacon -v1.2.0
+rack -v1.5.2
+rack-test -v0.6.2

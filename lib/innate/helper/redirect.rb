@@ -4,14 +4,14 @@ module Innate
       def respond(body, status = 200, header = {})
         response.write body
         response.status = status
-        header['Content-Type'] ||= 'text/html'
-        header.each{|k,v| response[k] = v }
+        header['Content-Type'] ||= Response.mime_type
+        header.each{|key, value| response[key] = value }
 
         throw(:respond, response)
       end
 
       def respond!(body, status = 200, header = {})
-        header['Content-Type'] ||= 'text/html'
+        header['Content-Type'] ||= Response.mime_type
         throw(:respond, Response.new(body, status, header))
       end
 
@@ -57,7 +57,7 @@ module Innate
       end
 
       def raw_redirect(target, options = {}, &block)
-        header = response.header.merge('Location' => target.to_s)
+        header = response.headers.merge('Location' => target.to_s)
         status = options[:status] || 302
         body   = options[:body] || redirect_body(target)
 
@@ -70,8 +70,8 @@ module Innate
           "<a href='#{target}'>#{h target}</a>!"
       end
 
-      def redirect_referrer(fallback = '/')
-        if referer = request.referer and url = request.url
+      def redirect_referrer(fallback = Innate.options.prefix)
+        if (referer = request.env['HTTP_REFERER']) && (url = request.url)
           referer_uri, request_uri = URI(referer), URI(url)
 
           redirect(referer) unless referer_uri == request_uri

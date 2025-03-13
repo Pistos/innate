@@ -28,13 +28,15 @@ module Innate
         hashes, names = args.partition{|arg| arg.respond_to?(:merge!) }
         hashes.each{|to_merge| hash.merge!(to_merge) }
 
-        escape = Rack::Utils.method(:escape)
+        name = name.to_s.gsub(/__/, '/')
+
         location = route_location(self)
-        front = Array[location, name, *names.map{|n| escape[n]}].join('/').squeeze('/')
+        front = Array[location, name, *names.map{|element|
+          Rack::Utils.escape(element) }].join('/').squeeze('/')
 
         return URI(front) if hash.empty?
 
-        query = hash.map{|k, v| "#{escape[k]}=#{escape[v]}" }.join(';')
+        query = Rack::Utils.build_query(hash)
         URI("#{front}?#{query}")
       end
       alias r route
@@ -50,7 +52,7 @@ module Innate
       # This method is mostly here in case you include this helper elsewhere
       # and don't want (or can't) type SomeNode.r all the time.
       #
-      # The usage is identical with {route}.
+      # The usage is identical with {Innate::Helper::Link#route}.
       #
       # @param [#to_s] name
       # @return [URI] to the location
@@ -78,9 +80,9 @@ module Innate
         when URI
           href = first.to_s
         when /^\w+:\/\//
-          uri = URI(first)
-          uri.query = Rack::Utils.escape_html(uri.query)
-          href = uri.to_s
+          uri       = URI(first)
+          uri.query = Rack::Utils.escape_html(uri.query) if uri.query
+          href      = uri.to_s
         else
           href = args.empty? ? r(text) : r(*args)
         end
