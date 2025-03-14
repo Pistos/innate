@@ -1,4 +1,4 @@
-require 'yaml/store'
+require 'innate/yaml/store'
 
 module Innate
   class Cache
@@ -12,7 +12,7 @@ module Innate
       include Cache::API
       include Cache::FileBased
 
-      STORE = ::YAML::Store
+      STORE = Innate::YAML::Store
       DIR = 'innate-cache-yaml'
       EXT = '.yaml'
     end

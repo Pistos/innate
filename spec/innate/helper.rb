@@ -66,7 +66,7 @@ describe Innate::Helper::Link do
   should 'construct link from ::a' do
     FNL.a(:index).should == '<a href="/foo/index">index</a>'
     FNL.a('index', :index, :x => :y).should == '<a href="/foo/index?x=y">index</a>'
-    FNL.a('duh/bar', 'duh/bar', :x => :y).should == "<a href=\"/foo/duh/bar?x=y\">duh&#x2F;bar</a>"
+    FNL.a('duh/bar', 'duh/bar', :x => :y).should == "<a href=\"/foo/duh/bar?x=y\">duh/bar</a>"
     FNL.a('foo', :/, :x => :y).should == '<a href="/foo/?x=y">foo</a>'
   end
 

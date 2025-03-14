@@ -70,8 +70,8 @@ module Innate
     #
     # Both +value+ and the elements of +keys+ will be turned into String by #to_s.
     def [](value, *keys)
-      return super(value) if keys.empty?
-      [value, *keys].map{|key| super(key) }
+      return params[value] if keys.empty?
+      [value, *keys].map{|key| params[key] }
     end
 
     # the full request URI provided by Rack::Request

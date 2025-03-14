@@ -15,7 +15,10 @@ module Innate
         FileUtils.mkdir_p(@dir)
 
         @filename = File.join(@dir, @prefix + self.class::EXT)
-        @store = self.class::STORE.new(@filename)
+        @store = self.class::STORE.new(
+          @filename,
+          other_permitted_classes: [Time]
+        )
       end
 
       def cache_clear

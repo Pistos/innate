@@ -19,7 +19,7 @@ class Games
   end
 
   def create
-    STORE[request[:name]] ||= 0 if request.post?
+    STORE[request['name']] ||= 0 if request.post?
 
     redirect_referrer
   end

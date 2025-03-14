@@ -1,3 +1,5 @@
+require 'sorted_set'
+
 module Innate
   module Helper
     ##

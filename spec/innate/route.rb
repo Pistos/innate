@@ -40,15 +40,15 @@ describe Innate::Route do
     Route['string'].class.should == Proc
 
     Route['calc sum'] = lambda{|path, req|
-      if req[:do_calc]
-        lval, rval = req[:a, :b]
+      if req['do_calc']
+        lval, rval = req['a', 'b']
         rval = rval.to_i * 10
         "/sum/#{lval}/#{rval}"
       end
     }
 
     Innate::Route('foo') do |path, req|
-      '/bar' if req[:bar]
+      '/bar' if req['bar']
     end
   end
 

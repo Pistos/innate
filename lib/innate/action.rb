@@ -92,7 +92,13 @@ module Innate
     end
 
     def wrap_in_layout
-      layout ? dup.render_in_layout(&Proc.new) : yield
+      if layout
+        dup.render_in_layout(
+          &Proc.new { yield }
+        )
+      else
+        yield
+      end
     end
 
     def render_in_layout

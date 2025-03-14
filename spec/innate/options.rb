@@ -106,8 +106,8 @@ describe Options do
     require 'pp'
     lines = @options.pretty_inspect.split(/\n/)
     lines.find_all{|l|
-      /:doc/ === l &&
-      /:value/ === l
+      /doc:/ === l &&
+      /value:/ === l
     }.size.should > 3
   end
 
