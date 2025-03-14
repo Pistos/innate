@@ -7,9 +7,16 @@ module Innate
     class Store < ::YAML::Store
       def initialize(*o)
         @permitted_classes = [Symbol]  # Default in stdlib
+        @use_permitted_classes = ::YAML.respond_to?(:safe_load)
 
         if o.last.is_a? Hash
-          @permitted_classes += Array(o.last[:other_permitted_classes])
+          other_permitted_classes = Array(o.last[:other_permitted_classes])
+
+          if ! @use_permitted_classes && other_permitted_classes.any?
+            raise ArgumentError.new("::YAML module does not support permitted_classes")
+          else
+            @permitted_classes += other_permitted_classes
+          end
         end
 
         super(*o)
@@ -17,19 +24,16 @@ module Innate
 
       # Based on Ruby 3.4.2 lib/ruby/3.4.0/yaml/store.rb
       def load(content)
-        table =  if ::YAML.respond_to?(:safe_load)
+        table =  if @use_permitted_classes
           if Psych::VERSION >= "3.1"
             ::YAML.safe_load(content, permitted_classes: @permitted_classes)
           else
             ::YAML.safe_load(content, @permitted_classes)
           end
         else
-          if other_permitted_classes.empty?
-            ::YAML.load(content)
-          else
-            raise ArgumentError.new("::YAML module does not support permitted_classes")
-          end
+          ::YAML.load(content)
         end
+
         if table == false || table == nil
           {}
         else
